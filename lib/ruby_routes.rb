@@ -4,6 +4,8 @@ require_relative "ruby_routes/route"
 require_relative "ruby_routes/route_set"
 require_relative "ruby_routes/url_helpers"
 require_relative "ruby_routes/router"
+require_relative "ruby_routes/radix_tree"
+require_relative "ruby_routes/node"
 
 module RubyRoutes
   class Error < StandardError; end
