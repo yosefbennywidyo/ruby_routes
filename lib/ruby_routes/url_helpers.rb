@@ -1,4 +1,4 @@
-module Router
+module RubyRoutes
   module UrlHelpers
     def self.included(base)
       base.extend(ClassMethods)
@@ -39,7 +39,7 @@ module Router
     def button_to(name, text, params = {})
       path = path_to(name, params)
       method = params.delete(:method) || :post
-      
+
       html = "<form action=\"#{path}\" method=\"#{method}\">"
       html += "<input type=\"hidden\" name=\"_method\" value=\"#{method}\">" if method != :get
       html += "<button type=\"submit\">#{text}</button>"

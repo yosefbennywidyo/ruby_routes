@@ -1,4 +1,4 @@
-module Router
+module RubyRoutes
   class RouteSet
     attr_reader :routes
 
@@ -24,7 +24,7 @@ module Router
     def match(request_method, request_path)
       route = find_route(request_method, request_path)
       return nil unless route
-      
+
       {
         route: route,
         params: route.extract_params(request_path),
@@ -44,15 +44,15 @@ module Router
 
     def generate_path_from_route(route, params = {})
       path = route.path.dup
-      
+
       params.each do |key, value|
         path.gsub!(":#{key}", value.to_s)
       end
-      
+
       # Remove any remaining :param placeholders
       path.gsub!(/\/:[^\/]+/, '')
       path.gsub!(/\/$/, '') if path != '/'
-      
+
       path
     end
 
