@@ -3,24 +3,22 @@ module RubyRoutes
     attr_reader :routes
 
     def initialize
-      @routes = []
+      @tree = RubyRoutes::RadixTree.new
       @named_routes = {}
-      @radix_tree = RubyRoutes::RadixTree.new
+      @routes = []          # keep list for specs / iteration / size
     end
 
     def add_route(route)
       @routes << route
+      @tree.add(route.path, route.methods, route)
       @named_routes[route.name] = route if route.named?
-      # Add to radix tree for fast lookup
-      route.methods.each do |method|
-        @radix_tree.add_route(route.path, method, route, constraints: route.constraints)
-      end
       route
     end
 
     def find_route(request_method, request_path)
-      handler_info, params = @radix_tree.find_route(request_path, request_method.to_s.upcase)
-      handler_info ? handler_info[:handler] : nil
+      # Return the Route object (or nil) to match spec expectations.
+      handler, _params = @tree.find(request_path, request_method.to_s.upcase)
+      handler
     end
 
     def find_named_route(name)
@@ -28,8 +26,11 @@ module RubyRoutes
     end
 
     def match(request_method, request_path)
-      route = find_route(request_method, request_path)
-      return nil unless route
+      # Use the radix tree directly so we can access the params returned by the tree.
+      handler, params = @tree.find(request_path, request_method.to_s.upcase)
+      return nil unless handler
+
+      route = handler
 
       {
         route: route,
@@ -65,6 +66,7 @@ module RubyRoutes
     def clear!
       @routes.clear
       @named_routes.clear
+      @tree = RubyRoutes::RadixTree.new
     end
 
     def size
