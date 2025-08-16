@@ -26,15 +26,23 @@ module RubyRoutes
     end
 
     def match(request_method, request_path)
-      # Use the radix tree directly so we can access the params returned by the tree.
-      handler, params = @tree.find(request_path, request_method.to_s.upcase)
+      # Use the radix tree result (params already parsed) to avoid reparsing the path.
+      handler, path_params = @tree.find(request_path, request_method.to_s.upcase)
       return nil unless handler
 
       route = handler
 
+      # path_params have string keys after the radix_tree change
+      params = (path_params || {}).transform_keys(&:to_s)
+      # merge defaults and query params (query parsing is private on Route)
+      params = route.defaults.transform_keys(&:to_s).merge(params)
+      params.merge!(route.send(:query_params, request_path))
+      # validate constraints (private)
+      route.send(:validate_constraints!, params)
+
       {
         route: route,
-        params: route.extract_params(request_path),
+        params: params,
         controller: route.controller,
         action: route.action
       }
@@ -66,7 +74,7 @@ module RubyRoutes
     def clear!
       @routes.clear
       @named_routes.clear
-      @tree = RubyRoutes::RadixTree.new
+      @tree = RadixTree.new
     end
 
     def size
