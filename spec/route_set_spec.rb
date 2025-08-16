@@ -5,7 +5,7 @@ RSpec.describe RubyRoutes::RouteSet do
 
   describe '#add_route' do
     it 'adds a route to the collection' do
-      route = RubyRoutes::Route.new('/users', to: 'users#index')
+      route = RubyRoutes::RadixTree.new('/users', to: 'users#index')
       route_set.add_route(route)
 
       expect(route_set.routes).to include(route)
@@ -13,7 +13,7 @@ RSpec.describe RubyRoutes::RouteSet do
     end
 
     it 'adds named routes to named_routes hash' do
-      route = RubyRoutes::Route.new('/users', as: :users, to: 'users#index')
+      route = RubyRoutes::RadixTree.new('/users', as: :users, to: 'users#index')
       route_set.add_route(route)
 
       expect(route_set.find_named_route(:users)).to eq(route)
@@ -22,7 +22,7 @@ RSpec.describe RubyRoutes::RouteSet do
 
   describe '#find_route' do
     it 'finds a matching route' do
-      route = RubyRoutes::Route.new('/users/:id', to: 'users#show')
+      route = RubyRoutes::RadixTree.new('/users/:id', to: 'users#show')
       route_set.add_route(route)
 
       found = route_set.find_route('GET', '/users/123')
@@ -30,7 +30,7 @@ RSpec.describe RubyRoutes::RouteSet do
     end
 
     it 'returns nil for non-matching route' do
-      route = RubyRoutes::Route.new('/users/:id', to: 'users#show')
+      route = RubyRoutes::RadixTree.new('/users/:id', to: 'users#show')
       route_set.add_route(route)
 
       found = route_set.find_route('GET', '/users')
@@ -38,7 +38,7 @@ RSpec.describe RubyRoutes::RouteSet do
     end
 
     it 'returns nil for wrong HTTP method' do
-      route = RubyRoutes::Route.new('/users/:id', to: 'users#show')
+      route = RubyRoutes::RadixTree.new('/users/:id', to: 'users#show')
       route_set.add_route(route)
 
       found = route_set.find_route('POST', '/users/123')
@@ -48,7 +48,7 @@ RSpec.describe RubyRoutes::RouteSet do
 
   describe '#find_named_route' do
     it 'finds a named route' do
-      route = RubyRoutes::Route.new('/users', as: :users, to: 'users#index')
+      route = RubyRoutes::RadixTree.new('/users', as: :users, to: 'users#index')
       route_set.add_route(route)
 
       found = route_set.find_named_route(:users)
@@ -62,7 +62,7 @@ RSpec.describe RubyRoutes::RouteSet do
 
   describe '#match' do
     it 'returns route info for matching request' do
-      route = RubyRoutes::Route.new('/users/:id', to: 'users#show')
+      route = RubyRoutes::RadixTree.new('/users/:id', to: 'users#show')
       route_set.add_route(route)
 
       result = route_set.match('GET', '/users/123')
@@ -74,7 +74,7 @@ RSpec.describe RubyRoutes::RouteSet do
     end
 
     it 'returns nil for non-matching request' do
-      route = RubyRoutes::Route.new('/users/:id', to: 'users#show')
+      route = RubyRoutes::RadixTree.new('/users/:id', to: 'users#show')
       route_set.add_route(route)
 
       result = route_set.match('GET', '/users')
@@ -84,7 +84,7 @@ RSpec.describe RubyRoutes::RouteSet do
 
   describe '#recognize_path' do
     it 'recognizes path with default GET method' do
-      route = RubyRoutes::Route.new('/users/:id', to: 'users#show')
+      route = RubyRoutes::RadixTree.new('/users/:id', to: 'users#show')
       route_set.add_route(route)
 
       result = route_set.recognize_path('/users/123')
@@ -94,7 +94,7 @@ RSpec.describe RubyRoutes::RouteSet do
     end
 
     it 'recognizes path with custom method' do
-      route = RubyRoutes::Route.new('/users/:id', via: :post, to: 'users#create')
+      route = RubyRoutes::RadixTree.new('/users/:id', via: :post, to: 'users#create')
       route_set.add_route(route)
 
       result = route_set.recognize_path('/users/123', :post)
@@ -106,7 +106,7 @@ RSpec.describe RubyRoutes::RouteSet do
 
   describe '#generate_path' do
     it 'generates path from named route' do
-      route = RubyRoutes::Route.new('/users/:id', as: :user, to: 'users#show')
+      route = RubyRoutes::RadixTree.new('/users/:id', as: :user, to: 'users#show')
       route_set.add_route(route)
 
       path = route_set.generate_path(:user, id: '123')
@@ -120,21 +120,21 @@ RSpec.describe RubyRoutes::RouteSet do
 
   describe '#generate_path_from_route' do
     it 'generates path from route with parameters' do
-      route = RubyRoutes::Route.new('/users/:id/posts/:post_id', to: 'posts#show')
+      route = RubyRoutes::RadixTree.new('/users/:id/posts/:post_id', to: 'posts#show')
 
       path = route_set.generate_path_from_route(route, id: '123', post_id: '456')
       expect(path).to eq('/users/123/posts/456')
     end
 
     it 'removes unused parameters' do
-      route = RubyRoutes::Route.new('/users/:id', to: 'users#show')
+      route = RubyRoutes::RadixTree.new('/users/:id', to: 'users#show')
 
       path = route_set.generate_path_from_route(route, id: '123', extra: 'value')
       expect(path).to eq('/users/123')
     end
 
     it 'handles root path' do
-      route = RubyRoutes::Route.new('/', to: 'home#index')
+      route = RubyRoutes::RadixTree.new('/', to: 'home#index')
 
       path = route_set.generate_path_from_route(route)
       expect(path).to eq('/')
@@ -143,8 +143,8 @@ RSpec.describe RubyRoutes::RouteSet do
 
   describe '#clear!' do
     it 'removes all routes' do
-      route1 = RubyRoutes::Route.new('/users', to: 'users#index')
-      route2 = RubyRoutes::Route.new('/posts', to: 'posts#index')
+      route1 = RubyRoutes::RadixTree.new('/users', to: 'users#index')
+      route2 = RubyRoutes::RadixTree.new('/posts', to: 'posts#index')
 
       route_set.add_route(route1)
       route_set.add_route(route2)
@@ -160,8 +160,8 @@ RSpec.describe RubyRoutes::RouteSet do
 
   describe 'enumerable methods' do
     it 'iterates over routes' do
-      route1 = RubyRoutes::Route.new('/users', to: 'users#index')
-      route2 = RubyRoutes::Route.new('/posts', to: 'posts#index')
+      route1 = RubyRoutes::RadixTree.new('/users', to: 'users#index')
+      route2 = RubyRoutes::RadixTree.new('/posts', to: 'posts#index')
 
       route_set.add_route(route1)
       route_set.add_route(route2)
@@ -173,7 +173,7 @@ RSpec.describe RubyRoutes::RouteSet do
     end
 
     it 'checks if route is included' do
-      route = RubyRoutes::Route.new('/users', to: 'users#index')
+      route = RubyRoutes::RadixTree.new('/users', to: 'users#index')
       route_set.add_route(route)
 
       expect(route_set.include?(route)).to be true
