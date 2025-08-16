@@ -7,18 +7,18 @@ module RubyRoutes
       @static_children = {}
       @dynamic_child = nil
       @wildcard_child = nil
-      @handlers = {}    # { method: {handler, constraints} }
+      @handlers = {}
       @param_name = nil
       @is_endpoint = false
     end
 
-    def add_handler(method, handler, constraints: {})
-      @handlers[method] = { handler: handler, constraints: constraints }
+    def add_handler(method, handler)
+      @handlers[method.to_s.upcase] = handler
       @is_endpoint = true
     end
 
     def get_handler(method)
-      @handlers[method]
+      @handlers[method.to_s.upcase]
     end
   end
 end
