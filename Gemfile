@@ -5,6 +5,9 @@ group :development do
   gem 'rake', '~> 13.0'
   gem 'rspec', '~> 3.12'
   gem 'simplecov', '~> 0.22'
+  gem 'benchmark'
+  gem 'memory_profiler'
+  gem 'stackprof'
 end
 
 group :examples do
