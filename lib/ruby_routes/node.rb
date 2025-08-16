@@ -13,12 +13,12 @@ module RubyRoutes
     end
 
     def add_handler(method, handler)
-      @handlers[method.to_s.upcase] = handler
+      @handlers[method.to_s] = handler
       @is_endpoint = true
     end
 
     def get_handler(method)
-      @handlers[method.to_s.upcase]
+      @handlers[method.to_s]
     end
   end
 end
