@@ -3,7 +3,7 @@ module RubyRoutes
     class << self
       # Allow RadixTree.new(path, options...) to act as a convenience factory
       # returning a Route (this matches test usage where specs call
-      # RubyRoutes::RadixTree.new('/path', to: 'controller#action')).
+      # RadixTree.new('/path', to: 'controller#action')).
       # Calling RadixTree.new with no arguments returns an actual RadixTree instance.
       def new(*args, &block)
         if args.any?
@@ -16,7 +16,7 @@ module RubyRoutes
     end
 
     def initialize
-      @root = RubyRoutes::Node.new
+      @root = Node.new
     end
 
     def add(path, methods, handler)
@@ -25,16 +25,16 @@ module RubyRoutes
 
       segments.each do |segment|
         if segment.start_with?('*')
-          current.wildcard_child ||= RubyRoutes::Node.new
+          current.wildcard_child ||= Node.new
           current = current.wildcard_child
           current.param_name = segment[1..-1] || 'splat'
           break
         elsif segment.start_with?(':')
-          current.dynamic_child ||= RubyRoutes::Node.new
+          current.dynamic_child ||= Node.new
           current = current.dynamic_child
           current.param_name = segment[1..-1]
         else
-          current.static_children[segment] ||= RubyRoutes::Node.new
+          current.static_children[segment] ||= Node.new
           current = current.static_children[segment]
         end
       end
@@ -52,10 +52,11 @@ module RubyRoutes
           current = current.static_children[segment]
         elsif current.dynamic_child
           current = current.dynamic_child
-          params[current.param_name.to_sym] = segment
+          # keep string keys to avoid symbol allocations and extra conversions later
+          params[current.param_name] = segment
         elsif current.wildcard_child
           current = current.wildcard_child
-          params[current.param_name.to_sym] = segments[index..-1].join('/')
+          params[current.param_name] = segments[index..-1].join('/')
           break
         else
           return [nil, {}]
