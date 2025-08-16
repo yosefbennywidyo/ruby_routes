@@ -16,9 +16,7 @@ module RubyRoutes
 
     def match?(request_method, request_path)
       return false unless methods.include?(request_method.to_s.upcase)
-
-      path_params = extract_path_params(request_path)
-      path_params != nil
+      !!extract_path_params(request_path)
     end
 
     def extract_params(request_path)
@@ -26,9 +24,10 @@ module RubyRoutes
       return {} unless path_params
 
       params = path_params.dup
-      # Convert symbol keys to string keys for consistency
-      string_defaults = defaults.transform_keys(&:to_s)
-      params.merge!(string_defaults)
+      params.merge!(query_params(request_path))
+      params.merge!(defaults.transform_keys(&:to_s))
+
+      validate_constraints!(params)
       params
     end
 
@@ -47,10 +46,10 @@ module RubyRoutes
     private
 
     def normalize_path(path)
-      path = "/#{path}" unless path.start_with?('/')
-      # Remove trailing slash unless it's the root path
-      path = path.chomp('/') unless path == '/'
-      path
+      p = path.to_s
+      p = "/#{p}" unless p.start_with?('/')
+      p = p.chomp('/') unless p == '/'
+      p
     end
 
     def extract_controller(options)
@@ -70,7 +69,7 @@ module RubyRoutes
       route_parts = path.split('/')
       request_parts = request_path.split('/')
 
-      return nil if route_parts.length != request_parts.length
+      return nil if route_parts.size != request_parts.size
 
       params = {}
       route_parts.each_with_index do |route_part, index|
@@ -85,6 +84,30 @@ module RubyRoutes
       end
 
       params
+    end
+
+    def query_params(path)
+      return {} unless path.include?('?')
+      Rack::Utils.parse_query(path.split('?').last).transform_keys(&:to_s)
+    end
+
+    def validate_constraints!(params)
+      constraints.each do |param, constraint|
+        value = params[param.to_s]
+        next unless value
+
+        case constraint
+        when Regexp
+          raise ConstraintViolation unless constraint.match?(value)
+        when Proc
+          raise ConstraintViolation unless constraint.call(value)
+        when Symbol
+          case constraint
+          when :int then raise ConstraintViolation unless value.match?(/^\d+$/)
+          when :uuid then raise ConstraintViolation unless value.match?(/^[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}$/i)
+          end
+        end
+      end
     end
 
     def validate_route!
