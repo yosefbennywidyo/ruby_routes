@@ -1,5 +1,43 @@
+require 'uri'
+
 module RubyRoutes
   class Route
+    # small LRU used for path generation cache
+    class SmallLru
+      attr_reader :hits, :misses, :evictions
+
+      # larger default to reduce eviction likelihood in benchmarks
+      def initialize(max_size = 1024)
+        @max_size = max_size
+        @h = {}
+        @hits = 0
+        @misses = 0
+        @evictions = 0
+      end
+
+      def get(key)
+        if @h.key?(key)
+          @hits += 1
+          val = @h.delete(key)
+          @h[key] = val
+          val
+        else
+          @misses += 1
+          nil
+        end
+      end
+
+      def set(key, val)
+        @h.delete(key) if @h.key?(key)
+        @h[key] = val
+        if @h.size > @max_size
+          @h.shift
+          @evictions += 1
+        end
+        val
+      end
+    end
+
     attr_reader :path, :methods, :controller, :action, :name, :constraints, :defaults
 
     def initialize(path, options = {})
@@ -9,7 +47,8 @@ module RubyRoutes
       @action = options[:action] || extract_action(options[:to])
       @name = options[:as]
       @constraints = options[:constraints] || {}
-      @defaults = options[:defaults] || {}
+      # pre-normalize defaults to string keys to avoid per-request transform_keys
+      @defaults = (options[:defaults] || {}).transform_keys(&:to_s)
 
       validate_route!
     end
@@ -24,8 +63,9 @@ module RubyRoutes
       return {} unless path_params
 
       params = path_params.dup
-      params.merge!(query_params(request_path))
-      params.merge!(defaults.transform_keys(&:to_s))
+      params.merge!(query_params(request_path)) # query_params returns string-keyed hash below
+      # defaults already string keys, only merge keys that aren't present
+      defaults.each { |k, v| params[k] = v unless params.key?(k) }
 
       validate_constraints!(params)
       params
@@ -43,7 +83,94 @@ module RubyRoutes
       !resource?
     end
 
+    # Fast path generator: uses precompiled token list and a small LRU.
+    # Avoids unbounded cache growth and skips URI-encoding for safe values.
+    def generate_path(params = {})
+      return '/' if path == '/'
+
+      # build merged for only relevant param names
+      merged = {}
+      defaults.each { |k, v| merged[k] = v } # defaults already string keys
+      params.each do |k, v|
+        ks = k.to_s
+        merged[ks] = v
+      end
+
+      missing = compiled_required_params - merged.keys
+      raise RubyRoutes::RouteNotFound, "Missing params: #{missing.join(', ')}" unless missing.empty?
+
+      @gen_cache ||= SmallLru.new(256)
+      cache_key = cache_key_for(merged)
+      if (cached = @gen_cache.get(cache_key))
+        return cached
+      end
+
+      parts = compiled_segments.map do |seg|
+        case seg[:type]
+        when :static
+          seg[:value]
+        when :param
+          v = merged.fetch(seg[:name]).to_s
+          safe_encode_segment(v)
+        when :splat
+          v = merged.fetch(seg[:name], '')
+          arr = v.is_a?(Array) ? v : v.to_s.split('/')
+          arr.map { |p| safe_encode_segment(p.to_s) }.join('/')
+        end
+      end
+
+      out = '/' + parts.join('/')
+      out = '/' if out == ''
+
+      @gen_cache.set(cache_key, out)
+      out
+    end
+
     private
+
+    # compile helpers (memoize)
+    def compiled_segments
+      @compiled_segments ||= begin
+        if path == '/'
+          []
+        else
+          path.split('/').reject(&:empty?).map do |seg|
+            if seg.start_with?(':')
+              { type: :param, name: seg[1..-1] }
+            elsif seg.start_with?('*')
+              { type: :splat, name: (seg[1..-1] || 'splat') }
+            else
+              { type: :static, value: seg }
+            end
+          end
+        end
+      end
+    end
+
+    def compiled_required_params
+      @compiled_required_params ||= compiled_segments.select { |s| s[:type] != :static }
+                                                  .map { |s| s[:name] }.uniq
+                                                  .reject { |n| defaults.to_s.include?(n) }
+    end
+
+    # Cache key: deterministic param-order key (fast, stable)
+    def cache_key_for(merged)
+      # build key in route token order (parameters & splat) to avoid sorting/inspect
+      names = compiled_param_names
+      names.map { |n| merged[n].to_s }.join('|')
+    end
+
+    def compiled_param_names
+      @compiled_param_names ||= compiled_segments.map { |s| s[:name] if s[:type] != :static }.compact
+    end
+
+    # Only URI-encode a segment when it contains unsafe chars.
+    UNRESERVED_RE = /\A[a-zA-Z0-9\-._~]+\z/
+    def safe_encode_segment(str)
+      # leave slash handling to splat logic (splats already split)
+      return str if UNRESERVED_RE.match?(str)
+      URI.encode_www_form_component(str)
+    end
 
     def normalize_path(path)
       p = path.to_s
@@ -66,20 +193,26 @@ module RubyRoutes
     end
 
     def extract_path_params(request_path)
-      route_parts = path.split('/')
-      request_parts = request_path.split('/')
+      segs = compiled_segments # memoized compiled route tokens
+      return nil if segs.empty? && request_path != '/'
 
-      return nil if route_parts.size != request_parts.size
+      req = request_path
+      req = req[1..-1] if req.start_with?('/')
+      req = req[0...-1] if req.end_with?('/') && req != '/'
+      request_parts = req == '' ? [] : req.split('/')
+
+      return nil if segs.size != request_parts.size
 
       params = {}
-      route_parts.each_with_index do |route_part, index|
-        request_part = request_parts[index]
-
-        if route_part.start_with?(':')
-          param_name = route_part[1..-1]
-          params[param_name] = request_part
-        elsif route_part != request_part
-          return nil
+      segs.each_with_index do |seg, idx|
+        case seg[:type]
+        when :static
+          return nil unless seg[:value] == request_parts[idx]
+        when :param
+          params[seg[:name]] = request_parts[idx]
+        when :splat
+          params[seg[:name]] = request_parts[idx..-1].join('/')
+          break
         end
       end
 
@@ -87,8 +220,10 @@ module RubyRoutes
     end
 
     def query_params(path)
-      return {} unless path.include?('?')
-      Rack::Utils.parse_query(path.split('?').last).transform_keys(&:to_s)
+      qidx = path.index('?')
+      return {} unless qidx
+      qs = path[(qidx + 1)..-1] || ''
+      Rack::Utils.parse_query(qs).transform_keys(&:to_s)
     end
 
     def validate_constraints!(params)
