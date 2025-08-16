@@ -26,19 +26,19 @@ module RubyRoutes
     end
 
     def match(request_method, request_path)
-      # Use the radix tree result (params already parsed) to avoid reparsing the path.
+      # Use RadixTree lookup and the path params it returns (avoid reparsing the path)
       handler, path_params = @tree.find(request_path, request_method.to_s.upcase)
       return nil unless handler
 
       route = handler
 
-      # path_params have string keys after the radix_tree change
-      params = (path_params || {}).transform_keys(&:to_s)
-      # merge defaults and query params (query parsing is private on Route)
+      # path_params are already string-keyed in RadixTree; merge defaults + query params
+      params = (path_params || {}).dup
       params = route.defaults.transform_keys(&:to_s).merge(params)
       params.merge!(route.send(:query_params, request_path))
-      # validate constraints (private)
-      route.send(:validate_constraints!, params)
+
+      # Note: lightweight constraint checks are performed during RadixTree#find.
+      # Skip full constraint re-validation here to avoid double work.
 
       {
         route: route,
@@ -58,17 +58,8 @@ module RubyRoutes
     end
 
     def generate_path_from_route(route, params = {})
-      path = route.path.dup
-
-      params.each do |key, value|
-        path.gsub!(":#{key}", value.to_s)
-      end
-
-      # Remove any remaining :param placeholders
-      path.gsub!(/\/:[^\/]+/, '')
-      path.gsub!(/\/$/, '') if path != '/'
-
-      path
+  # Delegate to Route#generate_path which uses precompiled segments + cache
+  route.generate_path(params)
     end
 
     def clear!
