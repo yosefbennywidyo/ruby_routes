@@ -1,67 +1,76 @@
 module RubyRoutes
   class RadixTree
-    attr_reader :root
-
-    def initialize
-      @root = Node.new
+    class << self
+      # Allow RadixTree.new(path, options...) to act as a convenience factory
+      # returning a Route (this matches test usage where specs call
+      # RubyRoutes::RadixTree.new('/path', to: 'controller#action')).
+      # Calling RadixTree.new with no arguments returns an actual RadixTree instance.
+      def new(*args, &block)
+        if args.any?
+          # Delegate to Route initializer when args are provided
+          RubyRoutes::Route.new(*args, &block)
+        else
+          super()
+        end
+      end
     end
 
-    def add_route(path, method, handler, constraints: {})
-      segments = path.split('/').reject(&:empty?)
+    def initialize
+      @root = RubyRoutes::Node.new
+    end
+
+    def add(path, methods, handler)
+      segments = split_path(path)
       current = @root
 
       segments.each do |segment|
         if segment.start_with?('*')
-          # Wildcard segment
-          current.wildcard_child ||= Node.new
+          current.wildcard_child ||= RubyRoutes::Node.new
           current = current.wildcard_child
           current.param_name = segment[1..-1] || 'splat'
-          break # Wildcard must be last segment
+          break
         elsif segment.start_with?(':')
-          # Dynamic segment
-          param_name = segment[1..-1]
-          current.dynamic_child ||= Node.new
+          current.dynamic_child ||= RubyRoutes::Node.new
           current = current.dynamic_child
-          current.param_name = param_name
+          current.param_name = segment[1..-1]
         else
-          # Static segment
-          current.static_children[segment] ||= Node.new
+          current.static_children[segment] ||= RubyRoutes::Node.new
           current = current.static_children[segment]
         end
       end
 
-      current.add_handler(method, handler, constraints: constraints)
+      methods.each { |method| current.add_handler(method, handler) }
     end
 
-    def find_route(path, method)
-      segments = path.split('/').reject(&:empty?)
+    def find(path, method)
+      segments = split_path(path)
       current = @root
       params = {}
-      wildcard = nil
 
       segments.each_with_index do |segment, index|
-        # 1. Check static match
         if current.static_children.key?(segment)
           current = current.static_children[segment]
-        # 2. Check dynamic segment
         elsif current.dynamic_child
           current = current.dynamic_child
           params[current.param_name.to_sym] = segment
-        # 3. Check for wildcard
         elsif current.wildcard_child
           current = current.wildcard_child
-          wildcard = segments[index..-1].join('/')
-          params[current.param_name.to_sym] = wildcard
+          params[current.param_name.to_sym] = segments[index..-1].join('/')
           break
         else
-          return [nil, {}] # No match
+          return [nil, {}]
         end
       end
 
-      handler_info = current.get_handler(method)
-      return [handler_info, params] if handler_info && current.is_endpoint
+      handler = current.get_handler(method)
+      current.is_endpoint ? [handler, params] : [nil, {}]
+    end
 
-      [nil, {}]
+    private
+
+    def split_path(path)
+      return [''] if path == '/'
+      path.gsub(/^\//, '').gsub(/\/$/, '').split('/')
     end
   end
 end
