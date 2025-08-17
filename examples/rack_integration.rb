@@ -1,20 +1,32 @@
 #!/usr/bin/env ruby
 
 require 'rack'
+# Prefer Puma handler for examples (install with `gem install puma` or add to Gemfile).
+begin
+  require 'puma'
+rescue LoadError
+  warn "puma gem not available — install with: gem install puma (falling back to WEBrick)"
+end
+# On recent Rubies WEBrick is a separate gem. Install with `gem install webrick`
+begin
+  require 'webrick'
+rescue LoadError
+  # no-op, fallback handling below will report if no handler available
+end
 require_relative '../lib/ruby_routes'
 
 # Define routes
-router = Router.draw do
+router = RubyRoutes.draw do
   get '/', to: 'home#index'
   get '/users', as: :users, to: 'users#index'
   get '/users/:id', as: :user, to: 'users#show'
   post '/users', as: :create_user, to: 'users#create'
   put '/users/:id', as: :update_user, to: 'users#update'
   delete '/users/:id', as: :delete_user, to: 'users#destroy'
-  
+
   resources :posts
   resources :comments
-  
+
   namespace :api do
     resources :users
   end
@@ -26,11 +38,11 @@ class Controller
     @env = env
     @params = params
   end
-  
+
   def render(content, status = 200, headers = {})
     [status, { 'Content-Type' => 'text/html' }.merge(headers), [content]]
   end
-  
+
   def json(data, status = 200)
     [status, { 'Content-Type' => 'application/json' }, [data.to_json]]
   end
@@ -58,7 +70,7 @@ class UsersController < Controller
       { id: 1, name: 'John Doe', email: 'john@example.com' },
       { id: 2, name: 'Jane Smith', email: 'jane@example.com' }
     ]
-    
+
     if @env['HTTP_ACCEPT']&.include?('application/json')
       json(users)
     else
@@ -71,10 +83,10 @@ class UsersController < Controller
       HTML
     end
   end
-  
+
   def show
     user = { id: @params['id'], name: 'User Name', email: 'user@example.com' }
-    
+
     if @env['HTTP_ACCEPT']&.include?('application/json')
       json(user)
     else
@@ -86,15 +98,15 @@ class UsersController < Controller
       HTML
     end
   end
-  
+
   def create
     render("User created with params: #{@params.inspect}", 201)
   end
-  
+
   def update
     render("User #{@params['id']} updated with params: #{@params.inspect}")
   end
-  
+
   def destroy
     render("User #{@params['id']} deleted", 200)
   end
@@ -107,7 +119,7 @@ class PostsController < Controller
       { id: 1, title: 'First Post', content: 'This is the first post.' },
       { id: 2, title: 'Second Post', content: 'This is the second post.' }
     ]
-    
+
     render(<<~HTML)
       <h1>Posts</h1>
       <ul>
@@ -116,10 +128,10 @@ class PostsController < Controller
       <p><a href="/">Back to Home</a></p>
     HTML
   end
-  
+
   def show
     post = { id: @params['id'], title: 'Post Title', content: 'Post content here.' }
-    
+
     render(<<~HTML)
       <h1>#{post[:title]}</h1>
       <p>#{post[:content]}</p>
@@ -127,7 +139,7 @@ class PostsController < Controller
     HTML
   end
 end
-
+=begin
 # API Users controller
 class Api::UsersController < Controller
   def index
@@ -137,36 +149,36 @@ class Api::UsersController < Controller
     ]
     json(users)
   end
-  
+
   def show
     user = { id: @params['id'], name: 'User Name', email: 'user@example.com' }
     json(user)
   end
 end
-
+=end
 # Rack application
 class RouterApp
   def initialize(router)
     @router = router
   end
-  
+
   def call(env)
     request_method = env['REQUEST_METHOD']
     request_path = env['PATH_INFO']
-    
+
     # Try to match the route
     route_info = @router.route_set.match(request_method, request_path)
-    
+
     if route_info
       # Extract controller and action
       controller_name = route_info[:controller]
       action_name = route_info[:action]
       params = route_info[:params]
-      
+
       # Instantiate controller
       controller_class = get_controller_class(controller_name)
       controller = controller_class.new(env, params)
-      
+
       # Call the action
       if controller.respond_to?(action_name)
         controller.send(action_name)
@@ -184,9 +196,9 @@ class RouterApp
   rescue => e
     [500, { 'Content-Type' => 'text/plain' }, ["Internal Server Error: #{e.message}"]]
   end
-  
+
   private
-  
+
   def get_controller_class(name)
     case name
     when 'home'
@@ -214,6 +226,36 @@ if __FILE__ == $0
     puts "  #{route.methods.join(', ')} #{route.path} -> #{route.controller}##{route.action}"
   end
   puts
-  
-  Rack::Handler::WEBrick.run app, Port: 9292
+
+  # Prefer Puma handler when available, otherwise try WEBrick.
+  handler =
+    if defined?(Rack::Handler::Puma)
+      Rack::Handler::Puma
+    else
+      begin
+        Rack::Handler.get('puma')
+      rescue LoadError, NameError
+        # try WEBrick as fallback
+        if defined?(Rack::Handler::WEBrick)
+          Rack::Handler::WEBrick
+        else
+          begin
+            Rack::Handler.get('webrick')
+          rescue LoadError, NameError
+            nil
+          end
+        end
+      end
+    end
+
+  if handler
+    handler.run app, Port: 9292
+  else
+    abort <<~MSG
+      No Rack handler available (tried puma then webrick).
+      - Install puma: gem install puma
+      - Or install webrick: gem install webrick
+      - Or run with Bundler: bundle exec ruby examples/rack_integration.rb
+    MSG
+  end
 end
