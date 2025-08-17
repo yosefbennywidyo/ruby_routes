@@ -7,199 +7,217 @@ module RubyRoutes
 
     def initialize(path, options = {})
       @path = normalize_path(path)
-      @methods = Array(options[:via] || :get).map(&:to_s).map(&:upcase)
+      # Pre-normalize and freeze methods at creation time
+      raw_methods = Array(options[:via] || :get)
+      @methods = raw_methods.map { |m| normalize_method(m) }.freeze
+      @methods_set = @methods.to_set.freeze
       @controller = extract_controller(options)
       @action = options[:action] || extract_action(options[:to])
       @name = options[:as]
       @constraints = options[:constraints] || {}
-      # pre-normalize defaults to string keys to avoid per-request transform_keys
-      @defaults = (options[:defaults] || {}).transform_keys(&:to_s)
+      # Pre-normalize defaults to string keys and freeze
+      @defaults = (options[:defaults] || {}).transform_keys(&:to_s).freeze
 
+      # Pre-compile everything at initialization
+      precompile_route_data
       validate_route!
     end
 
     def match?(request_method, request_path)
-      return false unless methods.include?(request_method.to_s.upcase)
-      !!extract_path_params(request_path)
+      # Fast method check: use frozen Set for O(1) lookup
+      return false unless @methods_set.include?(request_method.to_s.upcase)
+      !!extract_path_params_fast(request_path)
     end
 
     def extract_params(request_path, parsed_qp = nil)
-      path_params = extract_path_params(request_path)
-      return {} unless path_params
+      path_params = extract_path_params_fast(request_path)
+      return EMPTY_HASH unless path_params
 
-      # Reuse a thread-local hash to reduce allocations; return a dup to callers.
-      tmp = Thread.current[:ruby_routes_params] ||= {}
-      tmp.clear
-
-      # start with path params (they take precedence)
-      path_params.each { |k, v| tmp[k] = v }
-
-      # use provided parsed_qp if available, otherwise parse lazily only if needed
-      qp = parsed_qp
-      if qp.nil? && request_path.include?('?')
-        qp = query_params(request_path)
-      end
-      qp.each { |k, v| tmp[k] = v } if qp && !qp.empty?
-
-      # only set defaults for keys not already present
-      defaults.each { |k, v| tmp[k] = v unless tmp.key?(k) } if defaults
-
-      validate_constraints!(tmp)
-      tmp.dup
+      # Use optimized param building
+      build_params_hash(path_params, request_path, parsed_qp)
     end
 
     def named?
-      !name.nil?
+      !@name.nil?
     end
 
     def resource?
-      path.match?(/\/:id$/) || path.match?(/\/:id\./)
+      @is_resource
     end
 
     def collection?
-      !resource?
+      !@is_resource
     end
 
     def parse_query_params(path)
-      query_params(path)
+      query_params_fast(path)
     end
 
-    # Fast path generator: uses precompiled token list and a small LRU.
-    # Avoids unbounded cache growth and skips URI-encoding for safe values.
+    # Optimized path generation with better caching and fewer allocations
     def generate_path(params = {})
-      return '/' if path == '/'
+      return ROOT_PATH if @path == ROOT_PATH
 
-      # build merged for only relevant param names, reusing a thread-local hash
-      tmp = Thread.current[:ruby_routes_merged] ||= {}
-      tmp.clear
-      defaults.each { |k, v| tmp[k] = v } if defaults
-      params.each { |k, v| tmp[k.to_s] = v } if params
-      merged = tmp
+      # Fast path: empty params and no required params
+      if params.empty? && @required_params.empty?
+        return @static_path if @static_path
+      end
 
-      missing = compiled_required_params - merged.keys
-      raise RubyRoutes::RouteNotFound, "Missing params: #{missing.join(', ')}" unless missing.empty?
+      # Build merged params efficiently
+      merged = build_merged_params(params)
 
-      @gen_cache ||= SmallLru.new(256)
-      cache_key = cache_key_for(merged)
+      # Check required params (fast Set operation)
+      missing_params = @required_params_set - merged.keys
+      unless missing_params.empty?
+        raise RubyRoutes::RouteNotFound, "Missing params: #{missing_params.to_a.join(', ')}"
+      end
+
+      # Cache lookup
+      cache_key = build_cache_key_fast(merged)
       if (cached = @gen_cache.get(cache_key))
         return cached
       end
 
-      parts = compiled_segments.map do |seg|
-        case seg[:type]
-        when :static
-          seg[:value]
-        when :param
-          v = merged.fetch(seg[:name]).to_s
-          safe_encode_segment(v)
-        when :splat
-          v = merged.fetch(seg[:name], '')
-          arr = v.is_a?(Array) ? v : v.to_s.split('/')
-          arr.map { |p| safe_encode_segment(p.to_s) }.join('/')
-        end
-      end
+      # Generate path using string buffer (avoid array allocations)
+      path_str = generate_path_string(merged)
+      @gen_cache.set(cache_key, path_str)
+      path_str
+    end
 
-      out = '/' + parts.join('/')
-      out = '/' if out == ''
-
-      @gen_cache.set(cache_key, out)
-      out
+    # Fast query params method (cached and optimized)
+    def query_params(request_path)
+      query_params_fast(request_path)
     end
 
     private
 
-    # compile helpers (memoize)
-    def compiled_segments
-      @compiled_segments ||= begin
-        if path == '/'
-          []
-        else
-          path.split('/').reject(&:empty?).map do |seg|
-            RubyRoutes::Constant.segment_descriptor(seg)
-          end
-        end
+    # Constants for performance
+    EMPTY_HASH = {}.freeze
+    ROOT_PATH = '/'.freeze
+    UNRESERVED_RE = /\A[a-zA-Z0-9\-._~]+\z/.freeze
+    QUERY_CACHE_SIZE = 128
+
+    # Fast method normalization
+    def normalize_method(method)
+      case method
+      when :get then 'GET'
+      when :post then 'POST'
+      when :put then 'PUT'
+      when :patch then 'PATCH'
+      when :delete then 'DELETE'
+      when :head then 'HEAD'
+      when :options then 'OPTIONS'
+      else method.to_s.upcase
+      end.freeze
+    end
+
+    # Pre-compile all route data at initialization
+    def precompile_route_data
+      @is_resource = @path.match?(/\/:id(?:$|\.)/)
+      @gen_cache = SmallLru.new(512)  # larger cache
+      @query_cache = SmallLru.new(QUERY_CACHE_SIZE)
+
+      compile_segments
+      compile_required_params
+      check_static_path
+    end
+
+    def compile_segments
+      @compiled_segments = if @path == ROOT_PATH
+                             EMPTY_ARRAY
+                           else
+                             @path.split('/').reject(&:empty?).map do |seg|
+                               RubyRoutes::Constant.segment_descriptor(seg)
+                             end.freeze
+                           end
+    end
+
+    def compile_required_params
+      param_names = @compiled_segments.filter_map { |s| s[:name] if s[:type] != :static }
+      @param_names = param_names.freeze
+      @required_params = param_names.reject { |n| @defaults.key?(n) }.freeze
+      @required_params_set = @required_params.to_set.freeze
+    end
+
+    def check_static_path
+      # Pre-generate static paths (no params)
+      if @required_params.empty?
+        @static_path = generate_static_path
       end
     end
 
-    def compiled_required_params
-      @compiled_required_params ||= compiled_segments.select { |s| s[:type] != :static }
-                                                  .map { |s| s[:name] }.uniq
-                                                  .reject { |n| defaults.to_s.include?(n) }
+    def generate_static_path
+      return ROOT_PATH if @compiled_segments.empty?
+
+      parts = @compiled_segments.map { |seg| seg[:value] }
+      "/#{parts.join('/')}"
     end
 
-    # Cache key: deterministic param-order key (fast, stable)
-    def cache_key_for(merged)
-      # build key in route token order (parameters & splat) to avoid sorting/inspect
-      names = compiled_param_names
-      # build with single string buffer to avoid temporary arrays
-      buf = +""
-      names.each_with_index do |n, i|
-        val = merged[n]
-        part = if val.nil?
-                 ''
-               elsif val.is_a?(Array)
-                 val.map!(&:to_s) && val.join('/')
-               else
-                 val.to_s
-               end
-        buf << '|' unless i.zero?
-        buf << part
+    # Optimized param building
+    def build_params_hash(path_params, request_path, parsed_qp)
+      # Use pre-allocated hash when possible
+      result = get_thread_local_hash
+
+      # Path params first (highest priority)
+      result.update(path_params)
+
+      # Query params (if needed)
+      if parsed_qp
+        result.merge!(parsed_qp)
+      elsif request_path.include?('?')
+        qp = query_params_fast(request_path)
+        result.merge!(qp) unless qp.empty?
       end
-      buf
+
+      # Defaults (lowest priority)
+      merge_defaults_fast(result) unless @defaults.empty?
+
+      # Validate constraints efficiently
+      validate_constraints_fast!(result) unless @constraints.empty?
+
+      result.dup
     end
 
-    def compiled_param_names
-      @compiled_param_names ||= compiled_segments.map { |s| s[:name] if s[:type] != :static }.compact
+    def get_thread_local_hash
+      hash = Thread.current[:ruby_routes_params] ||= {}
+      hash.clear
+      hash
     end
 
-    # Only URI-encode a segment when it contains unsafe chars.
-    UNRESERVED_RE = /\A[a-zA-Z0-9\-._~]+\z/
-    def safe_encode_segment(str)
-      # leave slash handling to splat logic (splats already split)
-      return str if UNRESERVED_RE.match?(str)
-      URI.encode_www_form_component(str)
+    def merge_defaults_fast(result)
+      @defaults.each { |k, v| result[k] = v unless result.key?(k) }
     end
 
-    def normalize_path(path)
-      p = path.to_s
-      p = "/#{p}" unless p.start_with?('/')
-      p = p.chomp('/') unless p == '/'
-      p
+    # Fast path parameter extraction
+    def extract_path_params_fast(request_path)
+      return EMPTY_HASH if @compiled_segments.empty? && request_path == ROOT_PATH
+      return nil if @compiled_segments.empty?
+
+      # Fast path normalization
+      path_parts = split_path_fast(request_path)
+      return nil if @compiled_segments.size != path_parts.size
+
+      extract_params_from_parts(path_parts)
     end
 
-    def extract_controller(options)
-      if options[:to]
-        options[:to].to_s.split('#').first
-      else
-        options[:controller]
-      end
+    def split_path_fast(request_path)
+      # Optimized path splitting
+      path = request_path
+      path = path[1..-1] if path.start_with?('/')
+      path = path[0...-1] if path.end_with?('/') && path != ROOT_PATH
+      path.empty? ? [] : path.split('/')
     end
 
-    def extract_action(to)
-      return nil unless to
-      to.to_s.split('#').last
-    end
-
-    def extract_path_params(request_path)
-      segs = compiled_segments # memoized compiled route tokens
-      return nil if segs.empty? && request_path != '/'
-
-      req = request_path
-      req = req[1..-1] if req.start_with?('/')
-      req = req[0...-1] if req.end_with?('/') && req != '/'
-      request_parts = req == '' ? [] : req.split('/')
-
-      return nil if segs.size != request_parts.size
-
+    def extract_params_from_parts(path_parts)
       params = {}
-      segs.each_with_index do |seg, idx|
+
+      @compiled_segments.each_with_index do |seg, idx|
         case seg[:type]
         when :static
-          return nil unless seg[:value] == request_parts[idx]
+          return nil unless seg[:value] == path_parts[idx]
         when :param
-          params[seg[:name]] = request_parts[idx]
+          params[seg[:name]] = path_parts[idx]
         when :splat
-          params[seg[:name]] = request_parts[idx..-1].join('/')
+          params[seg[:name]] = path_parts[idx..-1].join('/')
           break
         end
       end
@@ -207,15 +225,128 @@ module RubyRoutes
       params
     end
 
-    def query_params(path)
-      qidx = path.index('?')
-      return {} unless qidx
-      qs = path[(qidx + 1)..-1] || ''
-      Rack::Utils.parse_query(qs)
+    # Optimized merged params building
+    def build_merged_params(params)
+      return @defaults if params.empty?
+
+      merged = get_thread_local_merged_hash
+      merged.update(@defaults) unless @defaults.empty?
+
+      # Convert param keys to strings efficiently
+      params.each { |k, v| merged[k.to_s] = v }
+      merged
     end
 
-    def validate_constraints!(params)
-      constraints.each do |param, constraint|
+    def get_thread_local_merged_hash
+      hash = Thread.current[:ruby_routes_merged] ||= {}
+      hash.clear
+      hash
+    end
+
+    # Fast cache key building with minimal allocations
+    def build_cache_key_fast(merged)
+      # Use instance variable buffer to avoid repeated allocations
+      @cache_key_buffer ||= String.new(capacity: 128)
+      @cache_key_buffer.clear
+
+      return @cache_key_buffer.dup if @required_params.empty?
+
+      @required_params.each_with_index do |name, idx|
+        @cache_key_buffer << '|' unless idx.zero?
+        value = merged[name]
+        @cache_key_buffer << (value.is_a?(Array) ? value.join('/') : value.to_s) if value
+      end
+      @cache_key_buffer.dup
+    end
+
+    # Optimized path generation
+    def generate_path_string(merged)
+      return ROOT_PATH if @compiled_segments.empty?
+
+      buffer = String.new(capacity: 128)
+      buffer << '/'
+
+      @compiled_segments.each_with_index do |seg, idx|
+        buffer << '/' unless idx.zero?
+
+        case seg[:type]
+        when :static
+          buffer << seg[:value]
+        when :param
+          value = merged.fetch(seg[:name]).to_s
+          buffer << encode_segment_fast(value)
+        when :splat
+          value = merged.fetch(seg[:name], '')
+          append_splat_value(buffer, value)
+        end
+      end
+
+      buffer == '/' ? ROOT_PATH : buffer
+    end
+
+    def append_splat_value(buffer, value)
+      case value
+      when Array
+        value.each_with_index do |part, idx|
+          buffer << '/' unless idx.zero?
+          buffer << encode_segment_fast(part.to_s)
+        end
+      when String
+        parts = value.split('/')
+        parts.each_with_index do |part, idx|
+          buffer << '/' unless idx.zero?
+          buffer << encode_segment_fast(part)
+        end
+      else
+        buffer << encode_segment_fast(value.to_s)
+      end
+    end
+
+    # Fast segment encoding
+    def encode_segment_fast(str)
+      return str if UNRESERVED_RE.match?(str)
+      URI.encode_www_form_component(str)
+    end
+
+    # Optimized query params with caching
+    def query_params_fast(path)
+      query_start = path.index('?')
+      return EMPTY_HASH unless query_start
+
+      query_string = path[(query_start + 1)..-1]
+      return EMPTY_HASH if query_string.empty?
+
+      # Cache query param parsing
+      if (cached = @query_cache.get(query_string))
+        return cached
+      end
+
+      result = Rack::Utils.parse_query(query_string)
+      @query_cache.set(query_string, result)
+      result
+    end
+
+    def normalize_path(path)
+      path_str = path.to_s
+      path_str = "/#{path_str}" unless path_str.start_with?('/')
+      path_str = path_str.chomp('/') unless path_str == ROOT_PATH
+      path_str
+    end
+
+    def extract_controller(options)
+      to = options[:to]
+      return options[:controller] unless to
+      to.to_s.split('#', 2).first
+    end
+
+    def extract_action(to)
+      return nil unless to
+      to.to_s.split('#', 2).last
+    end
+
+    # Optimized constraint validation
+    def validate_constraints_fast!(params)
+      @constraints.each do |param, constraint|
         value = params[param.to_s]
         next unless value
 
@@ -224,19 +355,23 @@ module RubyRoutes
           raise ConstraintViolation unless constraint.match?(value)
         when Proc
           raise ConstraintViolation unless constraint.call(value)
-        when Symbol
-          case constraint
-          when :int then raise ConstraintViolation unless value.match?(/^\d+$/)
-          when :uuid then raise ConstraintViolation unless value.match?(/^[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}$/i)
-          end
+        when :int
+          raise ConstraintViolation unless value.match?(/\A\d+\z/)
+        when :uuid
+          raise ConstraintViolation unless value.length == 36 &&
+                 value.match?(/\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z/i)
         end
       end
     end
 
     def validate_route!
-      raise InvalidRoute, "Controller is required" if controller.nil?
-      raise InvalidRoute, "Action is required" if action.nil?
-      raise InvalidRoute, "Invalid HTTP method: #{methods}" if methods.empty?
+      raise InvalidRoute, "Controller is required" if @controller.nil?
+      raise InvalidRoute, "Action is required" if @action.nil?
+      raise InvalidRoute, "Invalid HTTP method: #{@methods}" if @methods.empty?
     end
+
+    # Additional constants
+    EMPTY_ARRAY = [].freeze
+    EMPTY_STRING = ''.freeze
   end
-end
+ end
