@@ -1,43 +1,8 @@
 require 'uri'
+require_relative 'route/small_lru'
 
 module RubyRoutes
   class Route
-    # small LRU used for path generation cache
-    class SmallLru
-      attr_reader :hits, :misses, :evictions
-
-      # larger default to reduce eviction likelihood in benchmarks
-      def initialize(max_size = 1024)
-        @max_size = max_size
-        @h = {}
-        @hits = 0
-        @misses = 0
-        @evictions = 0
-      end
-
-      def get(key)
-        if @h.key?(key)
-          @hits += 1
-          val = @h.delete(key)
-          @h[key] = val
-          val
-        else
-          @misses += 1
-          nil
-        end
-      end
-
-      def set(key, val)
-        @h.delete(key) if @h.key?(key)
-        @h[key] = val
-        if @h.size > @max_size
-          @h.shift
-          @evictions += 1
-        end
-        val
-      end
-    end
-
     attr_reader :path, :methods, :controller, :action, :name, :constraints, :defaults
 
     def initialize(path, options = {})
@@ -150,13 +115,7 @@ module RubyRoutes
           []
         else
           path.split('/').reject(&:empty?).map do |seg|
-            if seg.start_with?(':')
-              { type: :param, name: seg[1..-1] }
-            elsif seg.start_with?('*')
-              { type: :splat, name: (seg[1..-1] || 'splat') }
-            else
-              { type: :static, value: seg }
-            end
+            RubyRoutes::Constant.segment_descriptor(seg)
           end
         end
       end
