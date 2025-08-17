@@ -5,8 +5,8 @@ module RubyRoutes
     def initialize
       @tree = RubyRoutes::RadixTree.new
       @named_routes = {}
-      @routes = []          # keep list for specs / iteration / size
-      @recognition_cache = {}        # simple bounded cache: key -> [route, params]
+      @routes = []                  # keep list for specs / iteration / size
+      @recognition_cache = {}       # simple bounded cache: key -> [route, params]
       @recognition_cache_order = []
       @recognition_cache_max = 4096
     end
