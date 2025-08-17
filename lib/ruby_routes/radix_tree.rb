@@ -1,3 +1,5 @@
+require_relative 'segment'
+
 module RubyRoutes
   class RadixTree
     class << self
@@ -23,26 +25,17 @@ module RubyRoutes
     end
 
     def add(path, methods, handler)
-      segments = split_path(path)
       current = @root
-
-      segments.each do |segment|
-        if segment.start_with?('*')
-          current.wildcard_child ||= Node.new
-          current = current.wildcard_child
-          current.param_name = segment[1..-1] || 'splat'
-          break
-        elsif segment.start_with?(':')
-          current.dynamic_child ||= Node.new
-          current = current.dynamic_child
-          current.param_name = segment[1..-1]
-        else
-          current.static_children[segment] ||= Node.new
-          current = current.static_children[segment]
-        end
+      parse_segments(path).each do |seg|
+        current = seg.ensure_child(current)
+        break if seg.wildcard?
       end
 
       methods.each { |method| current.add_handler(method, handler) }
+    end
+
+    def parse_segments(path)
+      split_path(path).map { |s| RubyRoutes::Segment.for(s) }
     end
 
     def find(path, method, params_out = nil)
@@ -51,20 +44,11 @@ module RubyRoutes
       params = params_out || {}
       params.clear if params_out
 
-      segments.each_with_index do |segment, index|
-        if current.static_children.key?(segment)
-          current = current.static_children[segment]
-        elsif current.dynamic_child
-          current = current.dynamic_child
-          # keep string keys to avoid symbol allocations and extra conversions later
-          params[current.param_name.to_s] = segment
-        elsif current.wildcard_child
-          current = current.wildcard_child
-          params[current.param_name.to_s] = segments[index..-1].join('/')
-          break
-        else
-          return [nil, {}]
-        end
+      segments.each_with_index do |text, idx|
+        next_node, should_break = current.traverse_for(text, idx, segments, params)
+        return [nil, {}] unless next_node
+        current = next_node
+        break if should_break
       end
 
       handler = current.get_handler(method)
