@@ -32,10 +32,20 @@ module RubyRoutes
 
       route = handler
 
-      # path_params are already string-keyed in RadixTree; merge defaults + query params
-      params = (path_params || {}).dup
-      params = route.defaults.transform_keys(&:to_s).merge(params)
-      params.merge!(route.send(:query_params, request_path))
+      # Reuse a thread-local hash to reduce temporary allocations when building params.
+      tmp = Thread.current[:ruby_routes_params] ||= {}
+      tmp.clear
+      if route.defaults
+        route.defaults.each { |k, v| tmp[k] = v }
+      end
+      if path_params
+        path_params.each { |k, v| tmp[k] = v }
+      end
+      qp = route.parse_query_params(request_path)
+      qp.each { |k, v| tmp[k] = v } unless qp.empty?
+
+      # Return a fresh hash to callers (don't expose the thread-local directly)
+      params = tmp.dup
 
       # Note: lightweight constraint checks are performed during RadixTree#find.
       # Skip full constraint re-validation here to avoid double work.
@@ -58,8 +68,8 @@ module RubyRoutes
     end
 
     def generate_path_from_route(route, params = {})
-  # Delegate to Route#generate_path which uses precompiled segments + cache
-  route.generate_path(params)
+      # Delegate to Route#generate_path which uses precompiled segments + cache
+      route.generate_path(params)
     end
 
     def clear!
