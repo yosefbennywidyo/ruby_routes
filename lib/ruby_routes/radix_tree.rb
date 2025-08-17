@@ -4,12 +4,8 @@ module RubyRoutes
   class RadixTree
     class << self
       # Allow RadixTree.new(path, options...) to act as a convenience factory
-      # returning a Route (this matches test usage where specs call
-      # RadixTree.new('/path', to: 'controller#action')).
-      # Calling RadixTree.new with no arguments returns an actual RadixTree instance.
       def new(*args, &block)
         if args.any?
-          # Delegate to Route initializer when args are provided
           RubyRoutes::Route.new(*args, &block)
         else
           super()
@@ -19,47 +15,85 @@ module RubyRoutes
 
     def initialize
       @root = Node.new
-      @_split_cache = {}           # simple LRU: key -> [value, age]
-      @split_cache_order = []      # track order for eviction
-      @split_cache_max = 1024
+      @split_cache = {}
+      @split_cache_order = []
+      @split_cache_max = 2048      # larger cache for better hit rates
+      @empty_segments = [].freeze  # reuse for root path
     end
 
     def add(path, methods, handler)
       current = @root
-      parse_segments(path).each do |seg|
+      segments = split_path_raw(path)
+
+      segments.each do |raw_seg|
+        seg = RubyRoutes::Segment.for(raw_seg)
         current = seg.ensure_child(current)
         break if seg.wildcard?
       end
 
-      methods.each { |method| current.add_handler(method, handler) }
-    end
-
-    def parse_segments(path)
-      split_path(path).map { |s| RubyRoutes::Segment.for(s) }
+      # Normalize methods once during registration
+      Array(methods).each { |method| current.add_handler(method.to_s.upcase, handler) }
     end
 
     def find(path, method, params_out = nil)
-      segments = split_path(path)
+      # Fast path: root route
+      if path == '/' || path.empty?
+        handler = @root.get_handler(method)
+        if @root.is_endpoint && handler
+          return [handler, params_out || {}]
+        else
+          return [nil, {}]
+        end
+      end
+
+      segments = split_path_cached(path)
       current = @root
       params = params_out || {}
       params.clear if params_out
 
-      segments.each_with_index do |text, idx|
-        next_node, should_break = current.traverse_for(text, idx, segments, params)
+      # Unrolled traversal for common case (1-3 segments)
+      case segments.size
+      when 1
+        next_node, _ = current.traverse_for(segments[0], 0, segments, params)
+        current = next_node
+      when 2
+        next_node, should_break = current.traverse_for(segments[0], 0, segments, params)
         return [nil, {}] unless next_node
         current = next_node
-        break if should_break
+        unless should_break
+          next_node, _ = current.traverse_for(segments[1], 1, segments, params)
+          current = next_node
+        end
+      when 3
+        next_node, should_break = current.traverse_for(segments[0], 0, segments, params)
+        return [nil, {}] unless next_node
+        current = next_node
+        unless should_break
+          next_node, should_break = current.traverse_for(segments[1], 1, segments, params)
+          return [nil, {}] unless next_node
+          current = next_node
+          unless should_break
+            next_node, _ = current.traverse_for(segments[2], 2, segments, params)
+            current = next_node
+          end
+        end
+      else
+        # General case for longer paths
+        segments.each_with_index do |text, idx|
+          next_node, should_break = current.traverse_for(text, idx, segments, params)
+          return [nil, {}] unless next_node
+          current = next_node
+          break if should_break
+        end
       end
 
+      return [nil, {}] unless current
       handler = current.get_handler(method)
       return [nil, {}] unless current.is_endpoint && handler
 
-      # lightweight constraint checks: reject early if route constraints don't match
-      route = handler
-      if route.respond_to?(:constraints) && route.constraints.any?
-        unless constraints_match?(route.constraints, params)
-          return [nil, {}]
-        end
+      # Fast constraint check
+      if handler.respond_to?(:constraints) && !handler.constraints.empty?
+        return [nil, {}] unless constraints_match_fast(handler.constraints, params)
       end
 
       [handler, params]
@@ -67,34 +101,48 @@ module RubyRoutes
 
     private
 
-    # faster, lower-allocation trim + split
-    def split_path(path)
-      @split_cache ||= {}
-      return [''] if path == '/'
+    # Cached path splitting with optimized common cases
+    def split_path_cached(path)
+      return @empty_segments if path == '/' || path.empty?
+
       if (cached = @split_cache[path])
         return cached
       end
 
-      p = path
-      p = p[1..-1] if p.start_with?('/')
-      p = p[0...-1] if p.end_with?('/')
-      segs = p.split('/')
+      result = split_path_raw(path)
 
-      # simple LRU insert
-      @split_cache[path] = segs
+      # Cache with simple LRU eviction
+      @split_cache[path] = result
       @split_cache_order << path
       if @split_cache_order.size > @split_cache_max
         oldest = @split_cache_order.shift
         @split_cache.delete(oldest)
       end
 
-      segs
+      result
     end
 
-    # constraints match helper (non-raising, lightweight)
-    def constraints_match?(constraints, params)
+    # Raw path splitting without caching (for registration)
+    def split_path_raw(path)
+      return [] if path == '/' || path.empty?
+
+      # Optimized trimming: avoid string allocations when possible
+      start_idx = path.start_with?('/') ? 1 : 0
+      end_idx = path.end_with?('/') ? -2 : -1
+
+      if start_idx == 0 && end_idx == -1
+        path.split('/')
+      else
+        path[start_idx..end_idx].split('/')
+      end
+    end
+
+    # Optimized constraint matching with fast paths
+    def constraints_match_fast(constraints, params)
       constraints.each do |param, constraint|
-        value = params[param.to_s] || params[param]
+        # Try both string and symbol keys (common pattern)
+        value = params[param.to_s]
+        value ||= params[param] if param.respond_to?(:to_s)
         next unless value
 
         case constraint
@@ -102,15 +150,16 @@ module RubyRoutes
           return false unless constraint.match?(value)
         when Proc
           return false unless constraint.call(value)
+        when :int
+          # Fast integer check without regex
+          return false unless value.is_a?(String) && value.match?(/\A\d+\z/)
+        when :uuid
+          # Fast UUID check
+          return false unless value.is_a?(String) && value.length == 36 &&
+                             value.match?(/\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z/i)
         when Symbol
-          case constraint
-          when :int then return false unless value.match?(/^\d+$/)
-          when :uuid then return false unless value.match?(/^[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}$/i)
-          else
-            # unknown symbol constraint — be conservative and allow
-          end
-        else
-          # unknown constraint type — allow (Route will validate later if needed)
+          # Handle other symbolic constraints
+          next  # unknown symbol constraint — allow
         end
       end
       true
