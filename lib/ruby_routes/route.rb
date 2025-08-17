@@ -13,9 +13,11 @@ module RubyRoutes
         @hits = 0
         @misses = 0
         @evictions = 0
+        @disabled = false
       end
 
       def get(key)
+        return nil if @disabled
         if @h.key?(key)
           @hits += 1
           val = @h.delete(key)
@@ -28,11 +30,17 @@ module RubyRoutes
       end
 
       def set(key, val)
+        return val if @disabled
         @h.delete(key) if @h.key?(key)
         @h[key] = val
         if @h.size > @max_size
           @h.shift
           @evictions += 1
+        end
+        # Simple thrash detection: when evictions grow beyond 2x capacity, disable cache.
+        if @evictions > (@max_size * 2)
+          @disabled = true
+          @h.clear
         end
         val
       end
@@ -81,6 +89,13 @@ module RubyRoutes
 
     def collection?
       !resource?
+    end
+
+    # Public, allocation-cheap query parser wrapper
+    # Delegates to the private query_params implementation which returns
+    # a string-keyed hash (Rack::Utils.parse_query already returns strings).
+    def parse_query_params(path)
+      query_params(path)
     end
 
     # Fast path generator: uses precompiled token list and a small LRU.
@@ -150,14 +165,24 @@ module RubyRoutes
     def compiled_required_params
       @compiled_required_params ||= compiled_segments.select { |s| s[:type] != :static }
                                                   .map { |s| s[:name] }.uniq
-                                                  .reject { |n| defaults.to_s.include?(n) }
+                                                  .reject { |n| defaults.key?(n) }
     end
 
     # Cache key: deterministic param-order key (fast, stable)
     def cache_key_for(merged)
       # build key in route token order (parameters & splat) to avoid sorting/inspect
+      # handle arrays (splats) explicitly and avoid `inspect`
       names = compiled_param_names
-      names.map { |n| merged[n].to_s }.join('|')
+      names.map do |n|
+        v = merged[n]
+        if v.nil?
+          ''
+        elsif v.is_a?(Array)
+          v.map(&:to_s).join('/')
+        else
+          v.to_s
+        end
+      end.join('|')
     end
 
     def compiled_param_names
@@ -168,6 +193,7 @@ module RubyRoutes
     UNRESERVED_RE = /\A[a-zA-Z0-9\-._~]+\z/
     def safe_encode_segment(str)
       # leave slash handling to splat logic (splats already split)
+      # cheap, fast check first: ascii-only unreserved chars avoid allocation
       return str if UNRESERVED_RE.match?(str)
       URI.encode_www_form_component(str)
     end
