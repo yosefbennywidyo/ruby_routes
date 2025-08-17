@@ -13,11 +13,9 @@ module RubyRoutes
         @hits = 0
         @misses = 0
         @evictions = 0
-        @disabled = false
       end
 
       def get(key)
-        return nil if @disabled
         if @h.key?(key)
           @hits += 1
           val = @h.delete(key)
@@ -30,17 +28,11 @@ module RubyRoutes
       end
 
       def set(key, val)
-        return val if @disabled
         @h.delete(key) if @h.key?(key)
         @h[key] = val
         if @h.size > @max_size
           @h.shift
           @evictions += 1
-        end
-        # Simple thrash detection: when evictions grow beyond 2x capacity, disable cache.
-        if @evictions > (@max_size * 2)
-          @disabled = true
-          @h.clear
         end
         val
       end
@@ -66,17 +58,29 @@ module RubyRoutes
       !!extract_path_params(request_path)
     end
 
-    def extract_params(request_path)
+    def extract_params(request_path, parsed_qp = nil)
       path_params = extract_path_params(request_path)
       return {} unless path_params
 
-      params = path_params.dup
-      params.merge!(query_params(request_path)) # query_params returns string-keyed hash below
-      # defaults already string keys, only merge keys that aren't present
-      defaults.each { |k, v| params[k] = v unless params.key?(k) }
+      # Reuse a thread-local hash to reduce allocations; return a dup to callers.
+      tmp = Thread.current[:ruby_routes_params] ||= {}
+      tmp.clear
 
-      validate_constraints!(params)
-      params
+      # start with path params (they take precedence)
+      path_params.each { |k, v| tmp[k] = v }
+
+      # use provided parsed_qp if available, otherwise parse lazily only if needed
+      qp = parsed_qp
+      if qp.nil? && request_path.include?('?')
+        qp = query_params(request_path)
+      end
+      qp.each { |k, v| tmp[k] = v } if qp && !qp.empty?
+
+      # only set defaults for keys not already present
+      defaults.each { |k, v| tmp[k] = v unless tmp.key?(k) } if defaults
+
+      validate_constraints!(tmp)
+      tmp.dup
     end
 
     def named?
@@ -91,9 +95,6 @@ module RubyRoutes
       !resource?
     end
 
-    # Public, allocation-cheap query parser wrapper
-    # Delegates to the private query_params implementation which returns
-    # a string-keyed hash (Rack::Utils.parse_query already returns strings).
     def parse_query_params(path)
       query_params(path)
     end
@@ -103,13 +104,12 @@ module RubyRoutes
     def generate_path(params = {})
       return '/' if path == '/'
 
-      # build merged for only relevant param names
-      merged = {}
-      defaults.each { |k, v| merged[k] = v } # defaults already string keys
-      params.each do |k, v|
-        ks = k.to_s
-        merged[ks] = v
-      end
+      # build merged for only relevant param names, reusing a thread-local hash
+      tmp = Thread.current[:ruby_routes_merged] ||= {}
+      tmp.clear
+      defaults.each { |k, v| tmp[k] = v } if defaults
+      params.each { |k, v| tmp[k.to_s] = v } if params
+      merged = tmp
 
       missing = compiled_required_params - merged.keys
       raise RubyRoutes::RouteNotFound, "Missing params: #{missing.join(', ')}" unless missing.empty?
@@ -165,24 +165,28 @@ module RubyRoutes
     def compiled_required_params
       @compiled_required_params ||= compiled_segments.select { |s| s[:type] != :static }
                                                   .map { |s| s[:name] }.uniq
-                                                  .reject { |n| defaults.key?(n) }
+                                                  .reject { |n| defaults.to_s.include?(n) }
     end
 
     # Cache key: deterministic param-order key (fast, stable)
     def cache_key_for(merged)
       # build key in route token order (parameters & splat) to avoid sorting/inspect
-      # handle arrays (splats) explicitly and avoid `inspect`
       names = compiled_param_names
-      names.map do |n|
-        v = merged[n]
-        if v.nil?
-          ''
-        elsif v.is_a?(Array)
-          v.map(&:to_s).join('/')
-        else
-          v.to_s
-        end
-      end.join('|')
+      # build with single string buffer to avoid temporary arrays
+      buf = +""
+      names.each_with_index do |n, i|
+        val = merged[n]
+        part = if val.nil?
+                 ''
+               elsif val.is_a?(Array)
+                 val.map!(&:to_s) && val.join('/')
+               else
+                 val.to_s
+               end
+        buf << '|' unless i.zero?
+        buf << part
+      end
+      buf
     end
 
     def compiled_param_names
@@ -193,7 +197,6 @@ module RubyRoutes
     UNRESERVED_RE = /\A[a-zA-Z0-9\-._~]+\z/
     def safe_encode_segment(str)
       # leave slash handling to splat logic (splats already split)
-      # cheap, fast check first: ascii-only unreserved chars avoid allocation
       return str if UNRESERVED_RE.match?(str)
       URI.encode_www_form_component(str)
     end
@@ -249,7 +252,7 @@ module RubyRoutes
       qidx = path.index('?')
       return {} unless qidx
       qs = path[(qidx + 1)..-1] || ''
-      Rack::Utils.parse_query(qs).transform_keys(&:to_s)
+      Rack::Utils.parse_query(qs)
     end
 
     def validate_constraints!(params)
