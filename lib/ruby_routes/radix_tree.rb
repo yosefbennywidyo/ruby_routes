@@ -45,10 +45,11 @@ module RubyRoutes
       methods.each { |method| current.add_handler(method, handler) }
     end
 
-    def find(path, method)
+    def find(path, method, params_out = nil)
       segments = split_path(path)
       current = @root
-      params = {}
+      params = params_out || {}
+      params.clear if params_out
 
       segments.each_with_index do |segment, index|
         if current.static_children.key?(segment)
