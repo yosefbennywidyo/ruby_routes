@@ -6,6 +6,9 @@ module RubyRoutes
       @tree = RubyRoutes::RadixTree.new
       @named_routes = {}
       @routes = []          # keep list for specs / iteration / size
+      @recognition_cache = {}        # simple bounded cache: key -> [route, params]
+      @recognition_cache_order = []
+      @recognition_cache_max = 4096
     end
 
     def add_route(route)
@@ -26,29 +29,40 @@ module RubyRoutes
     end
 
     def match(request_method, request_path)
-      # Use RadixTree lookup and the path params it returns (avoid reparsing the path)
-      handler, path_params = @tree.find(request_path, request_method.to_s.upcase)
-      return nil unless handler
+      # Normalize method once and attempt recognition cache hit
+      method_up = request_method.to_s.upcase
+      cache_key = "#{method_up}:#{request_path}"
+      if (cached = @recognition_cache[cache_key])
+        # Return cached params (frozen) directly to avoid heavy dup allocations.
+        cached_route, cached_params = cached
+        return { route: cached_route, params: cached_params, controller: cached_route.controller, action: cached_route.action }
+      end
 
+      # Use a thread-local hash as output for RadixTree to avoid allocating a params Hash
+      tmp = Thread.current[:ruby_routes_params] ||= {}
+      handler, _ = @tree.find(request_path, method_up, tmp)
+      return nil unless handler
       route = handler
 
-      # Reuse a thread-local hash to reduce temporary allocations when building params.
-      tmp = Thread.current[:ruby_routes_params] ||= {}
-      tmp.clear
+      # tmp now contains path params (filled by RadixTree). Merge defaults and query params in-place.
+      # defaults first (only set missing keys)
       if route.defaults
-        route.defaults.each { |k, v| tmp[k] = v }
+        route.defaults.each { |k, v| tmp[k] = v unless tmp.key?(k) }
       end
-      if path_params
-        path_params.each { |k, v| tmp[k] = v }
+      if request_path.include?('?')
+        qp = route.parse_query_params(request_path)
+        qp.each { |k, v| tmp[k] = v } unless qp.empty?
       end
-      qp = route.parse_query_params(request_path)
-      qp.each { |k, v| tmp[k] = v } unless qp.empty?
 
-      # Return a fresh hash to callers (don't expose the thread-local directly)
       params = tmp.dup
 
-      # Note: lightweight constraint checks are performed during RadixTree#find.
-      # Skip full constraint re-validation here to avoid double work.
+      # insert into bounded recognition cache (store frozen params to reduce accidental mutation)
+      @recognition_cache[cache_key] = [route, params.freeze]
+      @recognition_cache_order << cache_key
+      if @recognition_cache_order.size > @recognition_cache_max
+        oldest = @recognition_cache_order.shift
+        @recognition_cache.delete(oldest)
+      end
 
       {
         route: route,
