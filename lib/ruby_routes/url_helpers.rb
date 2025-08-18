@@ -37,9 +37,10 @@ module RubyRoutes
     end
 
     def button_to(name, text, params = {})
-      path = path_to(name, params)
-      method = params.delete(:method) || :post
+      local_params = params ? params.dup : {}
+      method = local_params.delete(:method) || :post
       method = method.to_s.downcase
+      path = path_to(name, local_params)
 
       # HTML forms only support GET and POST
       # For other methods, use POST with _method hidden field

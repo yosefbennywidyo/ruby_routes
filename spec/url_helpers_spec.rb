@@ -167,6 +167,17 @@ RSpec.describe RubyRoutes::UrlHelpers do
       expect(button).to include('/users/123')
       expect(button).not_to include('method=delete') # Should not appear in URL
     end
+
+    it 'does not mutate the original params hash' do
+      original_params = { id: '123', method: :delete }
+      original_params_copy = original_params.dup
+      
+      helper.button_to(:user, 'Delete', original_params)
+      
+      # Original params should remain unchanged
+      expect(original_params).to eq(original_params_copy)
+      expect(original_params[:method]).to eq(:delete)
+    end
   end
 
   describe '#redirect_to' do
