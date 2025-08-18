@@ -59,5 +59,16 @@ RSpec.describe RubyRoutes::Node do
       expect(node.get_handler(:get)).to be_nil
       expect(node.get_handler('GET')).to eq(handler)
     end
+    it 'requires uppercase string for get_handler when given a symbol' do
+      handler = { controller: 'users', action: 'index' }
+      node.add_handler(:get, handler)
+      expect(node.get_handler(:get)).to be_nil
+      expect(node.get_handler('GET')).to eq(handler)
+    end
+
+    it 'returns nil for unregistered methods' do
+      node.add_handler(:get, { controller: 'users', action: 'index' })
+      expect(node.get_handler('DELETE')).to be_nil
+    end
   end
 end
