@@ -156,6 +156,13 @@ RSpec.describe RubyRoutes::Router do
   end
 
   describe 'concerns' do
+    it 'initializes concerns hash properly' do
+      # Should not raise NoMethodError when accessing undefined concern
+      expect {
+        router.concerns :undefined_concern
+      }.to raise_error(RuntimeError, "Concern 'undefined_concern' not found")
+    end
+
     it 'defines and uses concerns' do
       router.concern :commentable do
         resources :comments
@@ -169,10 +176,10 @@ RSpec.describe RubyRoutes::Router do
       expect(routes.any? { |r| r.path == '/posts/:id/comments' }).to be true
     end
 
-    it 'handles undefined concern gracefully' do
+    it 'raises error for undefined concern' do
       expect {
         router.concerns :undefined_concern
-      }.to raise_error(NoMethodError)
+      }.to raise_error(RuntimeError, "Concern 'undefined_concern' not found")
     end
 
     it 'handles multiple concerns' do

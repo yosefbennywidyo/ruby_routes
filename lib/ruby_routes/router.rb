@@ -5,6 +5,7 @@ module RubyRoutes
     def initialize(&block)
       @route_set = RouteSet.new
       @scope_stack = []
+      @concerns = {}
       instance_eval(&block) if block_given?
     end
 
@@ -131,7 +132,6 @@ module RubyRoutes
     end
 
     def concern(name, &block)
-      @concerns ||= {}
       @concerns[name] = block
     end
 
