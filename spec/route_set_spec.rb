@@ -142,19 +142,39 @@ RSpec.describe RubyRoutes::RouteSet do
   end
 
   describe '#clear!' do
-    it 'removes all routes' do
+    it 'removes all routes and resets state' do
       route1 = RubyRoutes::RadixTree.new('/users', to: 'users#index')
       route2 = RubyRoutes::RadixTree.new('/posts', to: 'posts#index')
 
       route_set.add_route(route1)
       route_set.add_route(route2)
 
+      # Trigger some cache activity
+      route_set.match('GET', '/users')
+      route_set.match('GET', '/posts')
+
       expect(route_set.size).to eq(2)
+      expect(route_set.empty?).to be false
 
       route_set.clear!
 
       expect(route_set.size).to eq(0)
       expect(route_set.empty?).to be true
+      
+      # Verify caches are cleared
+      stats = route_set.cache_stats
+      expect(stats[:hits]).to eq(0)
+      expect(stats[:misses]).to eq(0)
+      expect(stats[:size]).to eq(0)
+    end
+
+    it 'handles clearing empty route set' do
+      expect(route_set.empty?).to be true
+      
+      expect { route_set.clear! }.not_to raise_error
+      
+      expect(route_set.empty?).to be true
+      expect(route_set.size).to eq(0)
     end
   end
 
@@ -177,6 +197,70 @@ RSpec.describe RubyRoutes::RouteSet do
       route_set.add_route(route)
 
       expect(route_set.include?(route)).to be true
+    end
+  end
+
+  describe '#cache_stats' do
+    it 'returns cache statistics' do
+      stats = route_set.cache_stats
+      
+      expect(stats).to have_key(:hits)
+      expect(stats).to have_key(:misses)
+      expect(stats).to have_key(:hit_rate)
+      expect(stats).to have_key(:size)
+    end
+
+    it 'tracks cache hits and misses' do
+      route = RubyRoutes::RadixTree.new('/users/:id', to: 'users#show')
+      route_set.add_route(route)
+      
+      # First match - cache miss
+      route_set.match('GET', '/users/123')
+      stats1 = route_set.cache_stats
+      
+      # Second match - cache hit
+      route_set.match('GET', '/users/123')
+      stats2 = route_set.cache_stats
+      
+      expect(stats2[:hits]).to be > stats1[:hits]
+    end
+  end
+
+  describe 'caching behavior' do
+    it 'caches route matches for performance' do
+      route = RubyRoutes::RadixTree.new('/users/:id', to: 'users#show')
+      route_set.add_route(route)
+      
+      # First call
+      result1 = route_set.match('GET', '/users/123')
+      
+      # Second call should use cache
+      result2 = route_set.match('GET', '/users/123')
+      
+      expect(result1).to eq(result2)
+      expect(result1[:params]['id']).to eq('123')
+    end
+
+    it 'handles cache eviction when cache gets large' do
+      # Register a dynamic route so matches are cached
+      route_set.add_route(RubyRoutes::RadixTree.new('/path/:id', to: 'dummy#show'))
+
+      # Many unique paths to grow and then evict entries
+      (1..10_000).each do |i|
+        route_set.match('GET', "/path/#{i}")
+      end
+
+      stats = route_set.cache_stats
+      expect(stats[:size]).to be < 10_000
+    end
+  end
+
+  describe 'constraint handling' do
+    it 'handles routes with constraints' do
+      route = RubyRoutes::RadixTree.new('/users/:id', to: 'users#show', constraints: { id: /\d+/ })
+      route_set.add_route(route)
+      
+      expect(route.constraints[:id]).to eq(/\d+/)
     end
   end
 end

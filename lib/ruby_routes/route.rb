@@ -1,4 +1,6 @@
 require 'uri'
+require 'timeout'
+require 'set'
 require_relative 'route/small_lru'
 
 module RubyRoutes
@@ -71,6 +73,12 @@ module RubyRoutes
         raise RubyRoutes::RouteNotFound, "Missing params: #{missing_params.to_a.join(', ')}"
       end
 
+      # Check for nil values in required params
+      nil_params = @required_params_set.select { |param| merged[param].nil? }
+      unless nil_params.empty?
+        raise RubyRoutes::RouteNotFound, "Missing or nil params: #{nil_params.to_a.join(', ')}"
+      end
+
       # Cache lookup
       cache_key = build_cache_key_fast(merged)
       if (cached = @gen_cache.get(cache_key))
@@ -95,19 +103,28 @@ module RubyRoutes
     ROOT_PATH = '/'.freeze
     UNRESERVED_RE = /\A[a-zA-Z0-9\-._~]+\z/.freeze
     QUERY_CACHE_SIZE = 128
+    
+    # Common HTTP methods - interned for performance
+    HTTP_GET = 'GET'.freeze
+    HTTP_POST = 'POST'.freeze
+    HTTP_PUT = 'PUT'.freeze
+    HTTP_PATCH = 'PATCH'.freeze
+    HTTP_DELETE = 'DELETE'.freeze
+    HTTP_HEAD = 'HEAD'.freeze
+    HTTP_OPTIONS = 'OPTIONS'.freeze
 
-    # Fast method normalization
+    # Fast method normalization using interned constants
     def normalize_method(method)
       case method
-      when :get then 'GET'
-      when :post then 'POST'
-      when :put then 'PUT'
-      when :patch then 'PATCH'
-      when :delete then 'DELETE'
-      when :head then 'HEAD'
-      when :options then 'OPTIONS'
-      else method.to_s.upcase
-      end.freeze
+      when :get then HTTP_GET
+      when :post then HTTP_POST
+      when :put then HTTP_PUT
+      when :patch then HTTP_PATCH
+      when :delete then HTTP_DELETE
+      when :head then HTTP_HEAD
+      when :options then HTTP_OPTIONS
+      else method.to_s.upcase.freeze
+      end
     end
 
     # Pre-compile all route data at initialization
@@ -178,9 +195,20 @@ module RubyRoutes
     end
 
     def get_thread_local_hash
-      hash = Thread.current[:ruby_routes_params] ||= {}
-      hash.clear
-      hash
+      # Use a pool of hashes to reduce allocations
+      pool = Thread.current[:ruby_routes_hash_pool] ||= []
+      if pool.empty?
+        {}
+      else
+        hash = pool.pop
+        hash.clear
+        hash
+      end
+    end
+
+    def return_hash_to_pool(hash)
+      pool = Thread.current[:ruby_routes_hash_pool] ||= []
+      pool.push(hash) if pool.size < 5  # Keep pool small to avoid memory bloat
     end
 
     def merge_defaults_fast(result)
@@ -194,7 +222,17 @@ module RubyRoutes
 
       # Fast path normalization
       path_parts = split_path_fast(request_path)
-      return nil if @compiled_segments.size != path_parts.size
+      
+      # Check if we have a wildcard/splat segment
+      has_splat = @compiled_segments.any? { |seg| seg[:type] == :splat }
+      
+      if has_splat
+        # For wildcard routes, path can have more parts than segments
+        return nil if path_parts.size < @compiled_segments.size - 1
+      else
+        # For non-wildcard routes, size must match exactly
+        return nil if @compiled_segments.size != path_parts.size
+      end
 
       extract_params_from_parts(path_parts)
     end
@@ -230,10 +268,18 @@ module RubyRoutes
       return @defaults if params.empty?
 
       merged = get_thread_local_merged_hash
+      
+      # Merge defaults first if they exist
       merged.update(@defaults) unless @defaults.empty?
 
-      # Convert param keys to strings efficiently
-      params.each { |k, v| merged[k.to_s] = v }
+      # Use merge! with transform_keys for better performance
+      if params.respond_to?(:transform_keys)
+        merged.merge!(params.transform_keys(&:to_s))
+      else
+        # Fallback for older Ruby versions
+        params.each { |k, v| merged[k.to_s] = v }
+      end
+      
       merged
     end
 
@@ -245,67 +291,59 @@ module RubyRoutes
 
     # Fast cache key building with minimal allocations
     def build_cache_key_fast(merged)
-      # Use instance variable buffer to avoid repeated allocations
-      @cache_key_buffer ||= String.new(capacity: 128)
-      @cache_key_buffer.clear
+      return '' if @required_params.empty?
 
-      return @cache_key_buffer.dup if @required_params.empty?
-
-      @required_params.each_with_index do |name, idx|
-        @cache_key_buffer << '|' unless idx.zero?
+      # Use array join which is faster than string concatenation
+      parts = @required_params.map do |name|
         value = merged[name]
-        @cache_key_buffer << (value.is_a?(Array) ? value.join('/') : value.to_s) if value
+        value.is_a?(Array) ? value.join('/') : value.to_s
       end
-      @cache_key_buffer.dup
+      parts.join('|')
     end
 
     # Optimized path generation
     def generate_path_string(merged)
       return ROOT_PATH if @compiled_segments.empty?
 
-      buffer = String.new(capacity: 128)
-      buffer << '/'
-
-      @compiled_segments.each_with_index do |seg, idx|
-        buffer << '/' unless idx.zero?
-
+      # Pre-allocate array for parts to avoid string buffer operations
+      parts = []
+      
+      @compiled_segments.each do |seg|
         case seg[:type]
         when :static
-          buffer << seg[:value]
+          parts << seg[:value]
         when :param
           value = merged.fetch(seg[:name]).to_s
-          buffer << encode_segment_fast(value)
+          parts << encode_segment_fast(value)
         when :splat
           value = merged.fetch(seg[:name], '')
-          append_splat_value(buffer, value)
+          parts << format_splat_value(value)
         end
       end
 
-      buffer == '/' ? ROOT_PATH : buffer
+      # Single join operation is faster than multiple string concatenations
+      path = "/#{parts.join('/')}"
+      path == '/' ? ROOT_PATH : path
     end
 
-    def append_splat_value(buffer, value)
+    def format_splat_value(value)
       case value
       when Array
-        value.each_with_index do |part, idx|
-          buffer << '/' unless idx.zero?
-          buffer << encode_segment_fast(part.to_s)
-        end
+        value.map { |part| encode_segment_fast(part.to_s) }.join('/')
       when String
-        parts = value.split('/')
-        parts.each_with_index do |part, idx|
-          buffer << '/' unless idx.zero?
-          buffer << encode_segment_fast(part)
-        end
+        value.split('/').map { |part| encode_segment_fast(part) }.join('/')
       else
-        buffer << encode_segment_fast(value.to_s)
+        encode_segment_fast(value.to_s)
       end
     end
 
-    # Fast segment encoding
+    # Fast segment encoding with caching for common values
     def encode_segment_fast(str)
       return str if UNRESERVED_RE.match?(str)
-      URI.encode_www_form_component(str)
+      
+      # Cache encoded segments to avoid repeated encoding
+      @encoding_cache ||= {}
+      @encoding_cache[str] ||= URI.encode_www_form_component(str)
     end
 
     # Optimized query params with caching
@@ -348,19 +386,107 @@ module RubyRoutes
     def validate_constraints_fast!(params)
       @constraints.each do |param, constraint|
         value = params[param.to_s]
-        next unless value
+        # Only skip validation if the parameter is completely missing from params
+        # Empty strings and nil values should still be validated
+        next unless params.key?(param.to_s)
 
         case constraint
         when Regexp
-          raise ConstraintViolation unless constraint.match?(value)
+          # Protect against ReDoS attacks with timeout
+          begin
+            Timeout.timeout(0.1) do
+              raise RubyRoutes::ConstraintViolation unless constraint.match?(value.to_s)
+            end
+          rescue Timeout::Error
+            raise RubyRoutes::ConstraintViolation, "Regex constraint timed out (potential ReDoS attack)"
+          end
         when Proc
-          raise ConstraintViolation unless constraint.call(value)
+          # DEPRECATED: Proc constraints are deprecated due to security risks
+          warn_proc_constraint_deprecation(param)
+          
+          # For backward compatibility, still execute but with strict timeout
+          begin
+            Timeout.timeout(0.05) do  # Reduced timeout for security
+              raise RubyRoutes::ConstraintViolation unless constraint.call(value.to_s)
+            end
+          rescue Timeout::Error
+            raise RubyRoutes::ConstraintViolation, "Proc constraint timed out (consider using secure alternatives)"
+          rescue => e
+            raise RubyRoutes::ConstraintViolation, "Proc constraint failed: #{e.message}"
+          end
         when :int
-          raise ConstraintViolation unless value.match?(/\A\d+\z/)
+          value_str = value.to_s
+          raise RubyRoutes::ConstraintViolation unless value_str.match?(/\A\d+\z/)
         when :uuid
-          raise ConstraintViolation unless value.length == 36 &&
-                 value.match?(/\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z/i)
+          value_str = value.to_s
+          raise RubyRoutes::ConstraintViolation unless value_str.length == 36 &&
+                 value_str.match?(/\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z/i)
+        when :email
+          value_str = value.to_s
+          raise RubyRoutes::ConstraintViolation unless value_str.match?(/\A[^@\s]+@[^@\s]+\.[^@\s]+\z/)
+        when :slug
+          value_str = value.to_s
+          raise RubyRoutes::ConstraintViolation unless value_str.match?(/\A[a-z0-9]+(?:-[a-z0-9]+)*\z/)
+        when :alpha
+          value_str = value.to_s
+          raise RubyRoutes::ConstraintViolation unless value_str.match?(/\A[a-zA-Z]+\z/)
+        when :alphanumeric
+          value_str = value.to_s
+          raise RubyRoutes::ConstraintViolation unless value_str.match?(/\A[a-zA-Z0-9]+\z/)
+        when Hash
+          # Secure hash-based constraints for common patterns
+          validate_hash_constraint!(constraint, value_str = value.to_s)
         end
+      end
+    end
+
+    def warn_proc_constraint_deprecation(param)
+      return if @proc_warnings_shown&.include?(param)
+      
+      @proc_warnings_shown ||= Set.new
+      @proc_warnings_shown << param
+      
+      warn <<~WARNING
+        [DEPRECATION] Proc constraints are deprecated due to security risks.
+        
+        Parameter: #{param}
+        Route: #{@path}
+        
+        Secure alternatives:
+        - Use regex: constraints: { #{param}: /\\A\\d+\\z/ }
+        - Use built-in types: constraints: { #{param}: :int }
+        - Use hash constraints: constraints: { #{param}: { min_length: 3, format: /\\A[a-z]+\\z/ } }
+        
+        Available built-in types: :int, :uuid, :email, :slug, :alpha, :alphanumeric
+        
+        This warning will become an error in a future version.
+      WARNING
+    end
+
+    def validate_hash_constraint!(constraint, value)
+      # Secure hash-based constraints
+      if constraint[:min_length] && value.length < constraint[:min_length]
+        raise RubyRoutes::ConstraintViolation, "Value too short (minimum #{constraint[:min_length]} characters)"
+      end
+      
+      if constraint[:max_length] && value.length > constraint[:max_length]
+        raise RubyRoutes::ConstraintViolation, "Value too long (maximum #{constraint[:max_length]} characters)"
+      end
+      
+      if constraint[:format] && !value.match?(constraint[:format])
+        raise RubyRoutes::ConstraintViolation, "Value does not match required format"
+      end
+      
+      if constraint[:in] && !constraint[:in].include?(value)
+        raise RubyRoutes::ConstraintViolation, "Value not in allowed list"
+      end
+      
+      if constraint[:not_in] && constraint[:not_in].include?(value)
+        raise RubyRoutes::ConstraintViolation, "Value in forbidden list"
+      end
+      
+      if constraint[:range] && !constraint[:range].cover?(value.to_i)
+        raise RubyRoutes::ConstraintViolation, "Value not in allowed range"
       end
     end
 

@@ -1,3 +1,5 @@
+require 'cgi'
+
 module RubyRoutes
   module UrlHelpers
     def self.included(base)
@@ -33,16 +35,33 @@ module RubyRoutes
 
     def link_to(name, text, params = {})
       path = path_to(name, params)
-      "<a href=\"#{path}\">#{text}</a>"
+      safe_path = CGI.escapeHTML(path.to_s)
+      safe_text = CGI.escapeHTML(text.to_s)
+      "<a href=\"#{safe_path}\">#{safe_text}</a>"
     end
 
     def button_to(name, text, params = {})
-      path = path_to(name, params)
-      method = params.delete(:method) || :post
+      local_params = params ? params.dup : {}
+      method = local_params.delete(:method) || :post
+      method = method.to_s.downcase
+      path = path_to(name, local_params)
 
-      html = "<form action=\"#{path}\" method=\"#{method}\">"
-      html += "<input type=\"hidden\" name=\"_method\" value=\"#{method}\">" if method != :get
-      html += "<button type=\"submit\">#{text}</button>"
+      # HTML forms only support GET and POST
+      # For other methods, use POST with _method hidden field
+      form_method = (method == 'get') ? 'get' : 'post'
+      
+      safe_path = CGI.escapeHTML(path.to_s)
+      safe_form_method = CGI.escapeHTML(form_method)
+      html = "<form action=\"#{safe_path}\" method=\"#{safe_form_method}\">"
+      
+      # Add _method hidden field for non-GET/POST methods
+      if method != 'get' && method != 'post'
+        safe_method = CGI.escapeHTML(method)
+        html += "<input type=\"hidden\" name=\"_method\" value=\"#{safe_method}\">"
+      end
+
+      safe_text = CGI.escapeHTML(text.to_s)
+      html += "<button type=\"submit\">#{safe_text}</button>"
       html += "</form>"
       html
     end

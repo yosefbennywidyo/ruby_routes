@@ -125,4 +125,227 @@ RSpec.describe RubyRoutes::Route do
       expect(route.collection?).to be false
     end
   end
+
+  describe 'constraint validation' do
+    it 'validates routes with constraints' do
+      route = RubyRoutes::RadixTree.new('/users/:id', to: 'users#show', constraints: { id: /\d+/ })
+      
+      expect(route.constraints[:id]).to eq(/\d+/)
+    end
+  end
+
+  describe 'method normalization' do
+    it 'normalizes HTTP methods to uppercase' do
+      route = RubyRoutes::RadixTree.new('/users', via: [:get, :post], to: 'users#index')
+      
+      expect(route.methods).to include('GET')
+      expect(route.methods).to include('POST')
+    end
+
+    it 'handles string methods' do
+      route = RubyRoutes::RadixTree.new('/users', via: 'patch', to: 'users#update')
+      
+      expect(route.methods).to include('PATCH')
+    end
+  end
+
+  describe '#parse_query_params' do
+    it 'handles empty query string' do
+      route = RubyRoutes::RadixTree.new('/search', to: 'search#index')
+      params = route.parse_query_params('/search')
+      
+      expect(params).to be_empty
+    end
+  end
+
+  describe 'path generation edge cases' do
+    it 'returns root path for root route' do
+      route = RubyRoutes::RadixTree.new('/', to: 'home#index', as: :root)
+      path = route.generate_path
+      
+      expect(path).to eq('/')
+    end
+
+    it 'uses static path for routes without parameters' do
+      route = RubyRoutes::RadixTree.new('/about', to: 'pages#about', as: :about)
+      path = route.generate_path
+      
+      expect(path).to eq('/about')
+    end
+
+    it 'raises error for missing required parameters' do
+      route = RubyRoutes::RadixTree.new('/users/:id', to: 'users#show', as: :user)
+      
+      expect {
+        route.generate_path
+      }.to raise_error(RubyRoutes::RouteNotFound, /Missing params: id/)
+    end
+
+    it 'raises error for nil required parameters' do
+      route = RubyRoutes::RadixTree.new('/users/:id', to: 'users#show', as: :user)
+      
+      expect {
+        route.generate_path(id: nil)
+      }.to raise_error(RubyRoutes::RouteNotFound, /Missing or nil params: id/)
+    end
+
+    it 'caches generated paths for performance' do
+      route = RubyRoutes::RadixTree.new('/users/:id', to: 'users#show', as: :user)
+      
+      # First call
+      path1 = route.generate_path(id: '123')
+      
+      # Second call should use cache
+      path2 = route.generate_path(id: '123')
+      
+      expect(path1).to eq(path2)
+      expect(path1).to eq('/users/123')
+    end
+
+    it 'handles complex parameter combinations' do
+      route = RubyRoutes::RadixTree.new('/posts/:post_id/comments/:id', 
+                                        to: 'comments#show', 
+                                        as: :post_comment)
+      
+      path = route.generate_path(post_id: '456', id: '789')
+      expect(path).to eq('/posts/456/comments/789')
+    end
+
+    it 'handles extra parameters' do
+      route = RubyRoutes::RadixTree.new('/users/:id', to: 'users#show', as: :user)
+      
+      path = route.generate_path(id: '123', format: 'json')
+      expect(path).to include('/users/123')
+    end
+  end
+
+  describe 'parameter extraction edge cases' do
+    it 'handles routes with no parameters' do
+      route = RubyRoutes::RadixTree.new('/about', to: 'pages#about')
+      params = route.extract_params('/about')
+      
+      expect(params).to be_a(Hash)
+      expect(params).to be_empty
+    end
+
+    it 'includes default parameters' do
+      route = RubyRoutes::RadixTree.new('/posts', to: 'posts#index', defaults: { format: 'html' })
+      params = route.extract_params('/posts')
+      
+      expect(params['format']).to eq('html')
+    end
+
+    it 'handles wildcard parameters' do
+      route = RubyRoutes::RadixTree.new('/files/*path', to: 'files#show')
+      params = route.extract_params('/files/docs/readme.txt')
+      
+      expect(params).to eq({ 'path' => 'docs/readme.txt' })
+    end
+
+    it 'handles wildcard with single segment' do
+      route = RubyRoutes::RadixTree.new('/uploads/*file', to: 'uploads#show')
+      params = route.extract_params('/uploads/image.jpg')
+      
+      expect(params).to eq({ 'file' => 'image.jpg' })
+    end
+
+    it 'handles wildcard with deep nested path' do
+      route = RubyRoutes::RadixTree.new('/assets/*resource', to: 'assets#show')
+      params = route.extract_params('/assets/css/components/buttons/primary.css')
+      
+      expect(params).to eq({ 'resource' => 'css/components/buttons/primary.css' })
+    end
+
+    it 'handles wildcard with custom parameter name' do
+      route = RubyRoutes::RadixTree.new('/api/v1/*endpoint', to: 'api#proxy')
+      params = route.extract_params('/api/v1/users/123/profile')
+      
+      expect(params).to eq({ 'endpoint' => 'users/123/profile' })
+    end
+
+    it 'rejects wildcard routes with insufficient path segments' do
+      route = RubyRoutes::RadixTree.new('/files/static/*path', to: 'files#show')
+      params = route.extract_params('/files')  # Missing 'static' and wildcard parts
+      
+      # extract_params returns EMPTY_HASH when extract_path_params_fast returns nil
+      expect(params).to eq({})
+    end
+
+    it 'handles multiple dynamic segments' do
+      route = RubyRoutes::RadixTree.new('/users/:user_id/posts/:id', to: 'posts#show')
+      params = route.extract_params('/users/123/posts/456')
+      
+      expect(params['user_id']).to eq('123')
+      expect(params['id']).to eq('456')
+    end
+  end
+
+  describe 'constraint validation edge cases' do
+    it 'stores constraints correctly' do
+      route = RubyRoutes::RadixTree.new('/users/:id', to: 'users#show', constraints: { id: /\d+/ })
+      
+      expect(route.constraints[:id]).to eq(/\d+/)
+    end
+
+    it 'handles multiple constraints' do
+      route = RubyRoutes::RadixTree.new('/posts/:year/:month', 
+                                        to: 'posts#archive',
+                                        constraints: { 
+                                          year: /\d{4}/, 
+                                          month: /\d{1,2}/ 
+                                        })
+      
+      expect(route.constraints[:year]).to eq(/\d{4}/)
+      expect(route.constraints[:month]).to eq(/\d{1,2}/)
+    end
+  end
+
+  describe 'route validation' do
+    it 'raises error for invalid route without controller or action' do
+      expect {
+        RubyRoutes::RadixTree.new('/invalid', {})
+      }.to raise_error(RubyRoutes::InvalidRoute)
+    end
+
+    it 'accepts route with controller option' do
+      expect {
+        RubyRoutes::RadixTree.new('/valid', controller: 'pages', action: 'show')
+      }.not_to raise_error
+    end
+
+    it 'accepts route with to option' do
+      expect {
+        RubyRoutes::RadixTree.new('/valid', to: 'pages#show')
+      }.not_to raise_error
+    end
+  end
+
+  describe 'performance optimizations' do
+    it 'pre-compiles route data during initialization' do
+      route = RubyRoutes::RadixTree.new('/users/:id/posts/:post_id', to: 'posts#show')
+      
+      # These should be pre-compiled
+      expect(route.instance_variable_get(:@required_params)).not_to be_empty
+      expect(route.instance_variable_get(:@required_params_set)).not_to be_empty
+    end
+
+    it 'uses frozen method sets for fast lookup' do
+      route = RubyRoutes::RadixTree.new('/users', via: [:get, :post], to: 'users#index')
+      methods_set = route.instance_variable_get(:@methods_set)
+      
+      expect(methods_set).to be_frozen
+      expect(methods_set).to include('GET', 'POST')
+    end
+
+    it 'caches path generation results' do
+      route = RubyRoutes::RadixTree.new('/users/:id', to: 'users#show', as: :user)
+      
+      # Generate path multiple times with same params
+      5.times { route.generate_path(id: '123') }
+      
+      # Cache should have entries (we can't directly test cache hits without exposing internals)
+      cache = route.instance_variable_get(:@gen_cache)
+      expect(cache).not_to be_nil
+    end
+  end
 end
