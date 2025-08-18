@@ -200,7 +200,17 @@ module RubyRoutes
 
       # Fast path normalization
       path_parts = split_path_fast(request_path)
-      return nil if @compiled_segments.size != path_parts.size
+      
+      # Check if we have a wildcard/splat segment
+      has_splat = @compiled_segments.any? { |seg| seg[:type] == :splat }
+      
+      if has_splat
+        # For wildcard routes, path can have more parts than segments
+        return nil if path_parts.size < @compiled_segments.size - 1
+      else
+        # For non-wildcard routes, size must match exactly
+        return nil if @compiled_segments.size != path_parts.size
+      end
 
       extract_params_from_parts(path_parts)
     end

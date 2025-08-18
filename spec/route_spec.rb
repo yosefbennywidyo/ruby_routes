@@ -235,24 +235,40 @@ RSpec.describe RubyRoutes::Route do
       expect(params['format']).to eq('html')
     end
 
-    it 'handles wildcard parameters (currently limited by size check)' do
-      # NOTE: Current implementation has a bug where wildcard routes fail
-      # due to strict size check in extract_path_params_fast (line 203)
-      # Route: /files/*path (2 segments) vs Path: /files/docs/readme.txt (3 parts)
+    it 'handles wildcard parameters' do
       route = RubyRoutes::RadixTree.new('/files/*path', to: 'files#show')
       params = route.extract_params('/files/docs/readme.txt')
       
-      # Currently returns empty hash due to size mismatch, should return:
-      # { 'path' => 'docs/readme.txt' }
-      expect(params).to eq({})
+      expect(params).to eq({ 'path' => 'docs/readme.txt' })
     end
 
-    it 'handles wildcard with exact segment count' do
-      # This works because segment count matches path parts count
+    it 'handles wildcard with single segment' do
       route = RubyRoutes::RadixTree.new('/uploads/*file', to: 'uploads#show')
       params = route.extract_params('/uploads/image.jpg')
       
       expect(params).to eq({ 'file' => 'image.jpg' })
+    end
+
+    it 'handles wildcard with deep nested path' do
+      route = RubyRoutes::RadixTree.new('/assets/*resource', to: 'assets#show')
+      params = route.extract_params('/assets/css/components/buttons/primary.css')
+      
+      expect(params).to eq({ 'resource' => 'css/components/buttons/primary.css' })
+    end
+
+    it 'handles wildcard with custom parameter name' do
+      route = RubyRoutes::RadixTree.new('/api/v1/*endpoint', to: 'api#proxy')
+      params = route.extract_params('/api/v1/users/123/profile')
+      
+      expect(params).to eq({ 'endpoint' => 'users/123/profile' })
+    end
+
+    it 'rejects wildcard routes with insufficient path segments' do
+      route = RubyRoutes::RadixTree.new('/files/static/*path', to: 'files#show')
+      params = route.extract_params('/files')  # Missing 'static' and wildcard parts
+      
+      # extract_params returns EMPTY_HASH when extract_path_params_fast returns nil
+      expect(params).to eq({})
     end
 
     it 'handles multiple dynamic segments' do
