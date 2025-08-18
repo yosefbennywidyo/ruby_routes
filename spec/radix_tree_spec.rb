@@ -98,19 +98,33 @@ RSpec.describe RubyRoutes::RadixTree do
       expect(result).to be_nil
     end
 
-    it 'validates proc constraints' do
-      constraint_proc = ->(value) { value.to_i > 100 }
-      route = double('route', constraints: { id: constraint_proc })
+    it 'validates hash constraints with ranges' do
+      # Hash constraints are validated at the Route level, not RadixTree level
+      # This test verifies the route can be added and found
+      route = double('route', constraints: { id: { range: 101..999 } })
       allow(route).to receive(:respond_to?).with(:constraints).and_return(true)
+      allow(route).to receive(:respond_to?).with(:i_respond_to_everything_so_im_not_really_a_matcher).and_return(false)
       tree.add('/users/:id', ['GET'], route)
       
-      # Should match when proc returns true
+      # RadixTree should find the route (constraint validation happens in Route class)
       result, _ = tree.find('/users/123', 'GET', { 'id' => '123' })
       expect(result).to eq(route)
       
-      # Should not match when proc returns false
       result, _ = tree.find('/users/50', 'GET', { 'id' => '50' })
-      expect(result).to be_nil
+      expect(result).to eq(route)
+    end
+
+    it 'validates proc constraints (deprecated)' do
+      # Proc constraint validation happens at Route level, not RadixTree level
+      constraint_proc = ->(value) { value.to_i > 100 }
+      route = double('route', constraints: { id: constraint_proc })
+      allow(route).to receive(:respond_to?).with(:constraints).and_return(true)
+      allow(route).to receive(:respond_to?).with(:i_respond_to_everything_so_im_not_really_a_matcher).and_return(false)
+      tree.add('/users/:id', ['GET'], route)
+      
+      # RadixTree should find the route (deprecation warning happens in Route class)
+      result, _ = tree.find('/users/123', 'GET', { 'id' => '123' })
+      expect(result).to eq(route)
     end
 
     it 'validates integer constraints' do

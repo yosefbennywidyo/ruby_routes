@@ -1,5 +1,6 @@
 require 'uri'
 require 'timeout'
+require 'set'
 require_relative 'route/small_lru'
 
 module RubyRoutes
@@ -380,14 +381,18 @@ module RubyRoutes
             raise RubyRoutes::ConstraintViolation, "Regex constraint timed out (potential ReDoS attack)"
           end
         when Proc
-          # WARNING: Proc constraints can execute arbitrary code and pose security risks
-          # Consider using regex or built-in constraint types instead
+          # DEPRECATED: Proc constraints are deprecated due to security risks
+          warn_proc_constraint_deprecation(param)
+          
+          # For backward compatibility, still execute but with strict timeout
           begin
-            Timeout.timeout(0.1) do
+            Timeout.timeout(0.05) do  # Reduced timeout for security
               raise RubyRoutes::ConstraintViolation unless constraint.call(value.to_s)
             end
           rescue Timeout::Error
-            raise RubyRoutes::ConstraintViolation, "Proc constraint timed out"
+            raise RubyRoutes::ConstraintViolation, "Proc constraint timed out (consider using secure alternatives)"
+          rescue => e
+            raise RubyRoutes::ConstraintViolation, "Proc constraint failed: #{e.message}"
           end
         when :int
           value_str = value.to_s
@@ -396,7 +401,72 @@ module RubyRoutes
           value_str = value.to_s
           raise RubyRoutes::ConstraintViolation unless value_str.length == 36 &&
                  value_str.match?(/\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z/i)
+        when :email
+          value_str = value.to_s
+          raise RubyRoutes::ConstraintViolation unless value_str.match?(/\A[^@\s]+@[^@\s]+\.[^@\s]+\z/)
+        when :slug
+          value_str = value.to_s
+          raise RubyRoutes::ConstraintViolation unless value_str.match?(/\A[a-z0-9]+(?:-[a-z0-9]+)*\z/)
+        when :alpha
+          value_str = value.to_s
+          raise RubyRoutes::ConstraintViolation unless value_str.match?(/\A[a-zA-Z]+\z/)
+        when :alphanumeric
+          value_str = value.to_s
+          raise RubyRoutes::ConstraintViolation unless value_str.match?(/\A[a-zA-Z0-9]+\z/)
+        when Hash
+          # Secure hash-based constraints for common patterns
+          validate_hash_constraint!(constraint, value_str = value.to_s)
         end
+      end
+    end
+
+    def warn_proc_constraint_deprecation(param)
+      return if @proc_warnings_shown&.include?(param)
+      
+      @proc_warnings_shown ||= Set.new
+      @proc_warnings_shown << param
+      
+      warn <<~WARNING
+        [DEPRECATION] Proc constraints are deprecated due to security risks.
+        
+        Parameter: #{param}
+        Route: #{@path}
+        
+        Secure alternatives:
+        - Use regex: constraints: { #{param}: /\\A\\d+\\z/ }
+        - Use built-in types: constraints: { #{param}: :int }
+        - Use hash constraints: constraints: { #{param}: { min_length: 3, format: /\\A[a-z]+\\z/ } }
+        
+        Available built-in types: :int, :uuid, :email, :slug, :alpha, :alphanumeric
+        
+        This warning will become an error in a future version.
+      WARNING
+    end
+
+    def validate_hash_constraint!(constraint, value)
+      # Secure hash-based constraints
+      if constraint[:min_length] && value.length < constraint[:min_length]
+        raise RubyRoutes::ConstraintViolation, "Value too short (minimum #{constraint[:min_length]} characters)"
+      end
+      
+      if constraint[:max_length] && value.length > constraint[:max_length]
+        raise RubyRoutes::ConstraintViolation, "Value too long (maximum #{constraint[:max_length]} characters)"
+      end
+      
+      if constraint[:format] && !value.match?(constraint[:format])
+        raise RubyRoutes::ConstraintViolation, "Value does not match required format"
+      end
+      
+      if constraint[:in] && !constraint[:in].include?(value)
+        raise RubyRoutes::ConstraintViolation, "Value not in allowed list"
+      end
+      
+      if constraint[:not_in] && constraint[:not_in].include?(value)
+        raise RubyRoutes::ConstraintViolation, "Value in forbidden list"
+      end
+      
+      if constraint[:range] && !constraint[:range].cover?(value.to_i)
+        raise RubyRoutes::ConstraintViolation, "Value not in allowed range"
       end
     end
 
