@@ -160,15 +160,25 @@ RSpec.describe 'Integration Tests' do
       end
 
       it 'generates paths for RESTful routes' do
-        # Note: RESTful routes don't automatically get names in this implementation
-        # but we can test the path structure
         routes = router.route_set.routes
-        user_show_route = routes.find { |r| r.path == '/users/:id' && r.methods.include?('GET') }
         
-        if user_show_route&.named?
-          path = router.route_set.generate_path_from_route(user_show_route, id: '123')
-          expect(path).to eq('/users/123')
-        end
+        # Test user show route
+        user_show_route = routes.find { |r| r.path == '/users/:id' && r.methods.include?('GET') }
+        expect(user_show_route).not_to be_nil
+        path = router.route_set.generate_path_from_route(user_show_route, id: '123')
+        expect(path).to eq('/users/123')
+        
+        # Test user index route
+        user_index_route = routes.find { |r| r.path == '/users' && r.methods.include?('GET') }
+        expect(user_index_route).not_to be_nil
+        path = router.route_set.generate_path_from_route(user_index_route)
+        expect(path).to eq('/users')
+        
+        # Test nested route (posts under users)
+        nested_route = routes.find { |r| r.path == '/users/:id/posts' && r.methods.include?('GET') }
+        expect(nested_route).not_to be_nil
+        path = router.route_set.generate_path_from_route(nested_route, id: '456')
+        expect(path).to eq('/users/456/posts')
       end
     end
 
