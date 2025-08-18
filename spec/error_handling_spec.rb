@@ -147,11 +147,29 @@ RSpec.describe 'Error Handling and Edge Cases' do
       expect(params['id']).to eq('123')
     end
 
-    it 'handles path generation with nil parameters' do
+    it 'raises error for nil required parameters' do
       route = RubyRoutes::RadixTree.new('/users/:id', to: 'users#show', as: :user)
       
       expect {
         route.generate_path(id: nil)
+      }.to raise_error(RubyRoutes::RouteNotFound, /Missing or nil params: id/)
+    end
+
+    it 'raises error for multiple nil required parameters' do
+      route = RubyRoutes::RadixTree.new('/users/:user_id/posts/:id', to: 'posts#show', as: :user_post)
+      
+      expect {
+        route.generate_path(user_id: '123', id: nil)
+      }.to raise_error(RubyRoutes::RouteNotFound, /Missing or nil params: id/)
+    end
+
+    it 'allows nil for optional parameters' do
+      route = RubyRoutes::RadixTree.new('/users/:id', to: 'users#show', as: :user)
+      
+      # Optional parameters (not in path) can be nil
+      expect {
+        path = route.generate_path(id: '123', format: nil)
+        expect(path).to eq('/users/123')
       }.not_to raise_error
     end
 

@@ -71,6 +71,12 @@ module RubyRoutes
         raise RubyRoutes::RouteNotFound, "Missing params: #{missing_params.to_a.join(', ')}"
       end
 
+      # Check for nil values in required params
+      nil_params = @required_params_set.select { |param| merged[param].nil? }
+      unless nil_params.empty?
+        raise RubyRoutes::RouteNotFound, "Missing or nil params: #{nil_params.to_a.join(', ')}"
+      end
+
       # Cache lookup
       cache_key = build_cache_key_fast(merged)
       if (cached = @gen_cache.get(cache_key))

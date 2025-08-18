@@ -181,6 +181,14 @@ RSpec.describe RubyRoutes::Route do
       }.to raise_error(RubyRoutes::RouteNotFound, /Missing params: id/)
     end
 
+    it 'raises error for nil required parameters' do
+      route = RubyRoutes::RadixTree.new('/users/:id', to: 'users#show', as: :user)
+      
+      expect {
+        route.generate_path(id: nil)
+      }.to raise_error(RubyRoutes::RouteNotFound, /Missing or nil params: id/)
+    end
+
     it 'caches generated paths for performance' do
       route = RubyRoutes::RadixTree.new('/users/:id', to: 'users#show', as: :user)
       
