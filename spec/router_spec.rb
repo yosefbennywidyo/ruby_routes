@@ -101,6 +101,28 @@ RSpec.describe RubyRoutes::Router do
       expect(routes.any? { |r| r.path == '/users/:id' && r.action == 'update' && r.methods.include?('PATCH') }).to be true
       expect(routes.any? { |r| r.path == '/users/:id' && r.action == 'destroy' }).to be true
     end
+
+    it 'defines nested resources routes correctly' do
+      router.resources :posts, nested: :comments
+      routes = router.route_set.routes
+
+      # Verify nested resource routes exist
+      expect(routes.any? { |r| r.path == '/posts/:id/comments' && r.action == 'index' }).to be true
+      expect(routes.any? { |r| r.path == '/posts/:id/comments/new' && r.action == 'new' }).to be true
+      expect(routes.any? { |r| r.path == '/posts/:id/comments' && r.action == 'create' && r.methods.include?('POST') }).to be true
+      expect(routes.any? { |r| r.path == '/posts/:id/comments/:nested_id' && r.action == 'show' }).to be true
+      expect(routes.any? { |r| r.path == '/posts/:id/comments/:nested_id/edit' && r.action == 'edit' }).to be true
+      expect(routes.any? { |r| r.path == '/posts/:id/comments/:nested_id' && r.action == 'update' && r.methods.include?('PUT') }).to be true
+      expect(routes.any? { |r| r.path == '/posts/:id/comments/:nested_id' && r.action == 'update' && r.methods.include?('PATCH') }).to be true
+      
+      # Critical test: DELETE should only map to destroy action, not update
+      delete_routes = routes.select { |r| r.path == '/posts/:id/comments/:nested_id' && r.methods.include?('DELETE') }
+      expect(delete_routes.size).to eq(1)
+      expect(delete_routes.first.action).to eq('destroy')
+      
+      # Ensure no DELETE route maps to update action
+      expect(routes.any? { |r| r.path == '/posts/:id/comments/:nested_id' && r.action == 'update' && r.methods.include?('DELETE') }).to be false
+    end
   end
 
   describe 'resource' do

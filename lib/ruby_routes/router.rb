@@ -64,7 +64,6 @@ module RubyRoutes
         get "/#{plural}/:id/#{nested_plural}/:nested_id/edit", options.merge(to: "#{nested_plural}#edit")
         put "/#{plural}/:id/#{nested_plural}/:nested_id", options.merge(to: "#{nested_plural}#update")
         patch "/#{plural}/:id/#{nested_plural}/:nested_id", options.merge(to: "#{nested_plural}#update")
-        delete "/#{plural}/:id/#{nested_plural}/:nested_id", options.merge(to: "#{nested_plural}#update")
         delete "/#{plural}/:id/#{nested_plural}/:nested_id", options.merge(to: "#{nested_plural}#destroy")
       end
 
