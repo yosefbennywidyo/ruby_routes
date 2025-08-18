@@ -15,6 +15,10 @@ RSpec.describe RubyRoutes::Node do
       handler = double('handler')
       node.add_handler('GET', handler)
       
+      expect(node.get_handler('GET')).to eq(handler)
+      expect(node.is_endpoint).to be true
+    end
+
     it 'is not an endpoint by default' do
       expect(node.is_endpoint).to be false
     end
@@ -27,16 +31,37 @@ RSpec.describe RubyRoutes::Node do
       expect(node.is_endpoint).to be true
     end
 
-<<<<<<< HEAD
-    it 'handles multiple HTTP methods' do
-      get_handler = double('get_handler')
-      post_handler = double('post_handler')
-      
-      node.add_handler('GET', get_handler)
-      node.add_handler('POST', post_handler)
-      
+    it 'normalizes string methods to uppercase' do
+      handler = { controller: 'users', action: 'create' }
+      node.add_handler('post', handler)
+
+      expect(node.get_handler('POST')).to eq(handler)
+      expect(node.is_endpoint).to be true
+    end
+
+    it 'handles multiple methods on same node' do
+      get_handler = { controller: 'users', action: 'show' }
+      put_handler = { controller: 'users', action: 'update' }
+
+      node.add_handler(:get, get_handler)
+      node.add_handler(:put, put_handler)
+
       expect(node.get_handler('GET')).to eq(get_handler)
-      expect(node.get_handler('POST')).to eq(post_handler)
+      expect(node.get_handler('PUT')).to eq(put_handler)
+      expect(node.is_endpoint).to be true
+    end
+
+    it 'does not normalize in get_handler (requires upstream normalization)' do
+      node.add_handler(:get, { controller: 'users', action: 'index' })
+      expect(node.get_handler('get')).to be_nil
+      expect(node.get_handler('GET')).to eq({ controller: 'users', action: 'index' })
+    end
+
+    it 'requires uppercase string for get_handler when given a symbol' do
+      handler = { controller: 'users', action: 'index' }
+      node.add_handler(:get, handler)
+      expect(node.get_handler(:get)).to be_nil
+      expect(node.get_handler('GET')).to eq(handler)
     end
   end
 
