@@ -242,13 +242,16 @@ RSpec.describe RubyRoutes::RouteSet do
     end
 
     it 'handles cache eviction when cache gets large' do
-      # Add many routes to trigger cache eviction
-      (1..10000).each do |i|
-        route_set.match('GET', "/path#{i}")
+      # Register a dynamic route so matches are cached
+      route_set.add_route(RubyRoutes::RadixTree.new('/path/:id', to: 'dummy#show'))
+
+      # Many unique paths to grow and then evict entries
+      (1..10_000).each do |i|
+        route_set.match('GET', "/path/#{i}")
       end
-      
+
       stats = route_set.cache_stats
-      expect(stats[:size]).to be < 10000
+      expect(stats[:size]).to be < 10_000
     end
   end
 
