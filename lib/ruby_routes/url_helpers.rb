@@ -1,3 +1,5 @@
+require 'cgi'
+
 module RubyRoutes
   module UrlHelpers
     def self.included(base)
@@ -33,7 +35,8 @@ module RubyRoutes
 
     def link_to(name, text, params = {})
       path = path_to(name, params)
-      "<a href=\"#{path}\">#{text}</a>"
+      safe_text = CGI.escapeHTML(text.to_s)
+      "<a href=\"#{path}\">#{safe_text}</a>"
     end
 
     def button_to(name, text, params = {})
@@ -53,7 +56,8 @@ module RubyRoutes
         html += "<input type=\"hidden\" name=\"_method\" value=\"#{method}\">"
       end
       
-      html += "<button type=\"submit\">#{text}</button>"
+      safe_text = CGI.escapeHTML(text.to_s)
+      html += "<button type=\"submit\">#{safe_text}</button>"
       html += "</form>"
       html
     end

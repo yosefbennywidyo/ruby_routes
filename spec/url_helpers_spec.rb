@@ -108,7 +108,19 @@ RSpec.describe RubyRoutes::UrlHelpers do
 
     it 'handles special characters in text' do
       link = helper.link_to(:about, 'About & Contact')
-      expect(link).to eq('<a href="/about">About & Contact</a>')
+      expect(link).to eq('<a href="/about">About &amp; Contact</a>')
+    end
+
+    it 'escapes HTML to prevent XSS attacks' do
+      malicious_text = '<script>alert("XSS")</script>'
+      link = helper.link_to(:about, malicious_text)
+      expect(link).to eq('<a href="/about">&lt;script&gt;alert(&quot;XSS&quot;)&lt;/script&gt;</a>')
+    end
+
+    it 'escapes HTML entities in text' do
+      text_with_entities = 'Price: $100 < $200 & "special" offer'
+      link = helper.link_to(:about, text_with_entities)
+      expect(link).to eq('<a href="/about">Price: $100 &lt; $200 &amp; &quot;special&quot; offer</a>')
     end
   end
 
@@ -177,6 +189,21 @@ RSpec.describe RubyRoutes::UrlHelpers do
       # Original params should remain unchanged
       expect(original_params).to eq(original_params_copy)
       expect(original_params[:method]).to eq(:delete)
+    end
+
+    it 'escapes HTML in button text to prevent XSS' do
+      malicious_text = '<script>alert("XSS")</script>'
+      button = helper.button_to(:user, malicious_text, id: '123')
+      
+      expect(button).to include('<button type="submit">&lt;script&gt;alert(&quot;XSS&quot;)&lt;/script&gt;</button>')
+      expect(button).not_to include('<script>alert("XSS")</script>')
+    end
+
+    it 'escapes special characters in button text' do
+      text_with_chars = 'Save & "Continue" < Next'
+      button = helper.button_to(:user, text_with_chars, id: '123')
+      
+      expect(button).to include('<button type="submit">Save &amp; &quot;Continue&quot; &lt; Next</button>')
     end
   end
 
