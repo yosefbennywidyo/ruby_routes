@@ -179,4 +179,79 @@ RSpec.describe RubyRoutes::RouteSet do
       expect(route_set.include?(route)).to be true
     end
   end
+
+  describe '#clear!' do
+    it 'clears all routes and caches' do
+      route = RubyRoutes::RadixTree.new('/users', to: 'users#index')
+      route_set.add_route(route)
+      
+      expect(route_set.size).to eq(1)
+      
+      route_set.clear!
+      
+      expect(route_set.size).to eq(0)
+      expect(route_set.empty?).to be true
+    end
+  end
+
+  describe '#cache_stats' do
+    it 'returns cache statistics' do
+      stats = route_set.cache_stats
+      
+      expect(stats).to have_key(:hits)
+      expect(stats).to have_key(:misses)
+      expect(stats).to have_key(:hit_rate)
+      expect(stats).to have_key(:size)
+    end
+
+    it 'tracks cache hits and misses' do
+      route = RubyRoutes::RadixTree.new('/users/:id', to: 'users#show')
+      route_set.add_route(route)
+      
+      # First match - cache miss
+      route_set.match('GET', '/users/123')
+      stats1 = route_set.cache_stats
+      
+      # Second match - cache hit
+      route_set.match('GET', '/users/123')
+      stats2 = route_set.cache_stats
+      
+      expect(stats2[:hits]).to be > stats1[:hits]
+    end
+  end
+
+  describe 'caching behavior' do
+    it 'caches route matches for performance' do
+      route = RubyRoutes::RadixTree.new('/users/:id', to: 'users#show')
+      route_set.add_route(route)
+      
+      # First call
+      result1 = route_set.match('GET', '/users/123')
+      
+      # Second call should use cache
+      result2 = route_set.match('GET', '/users/123')
+      
+      expect(result1).to eq(result2)
+      expect(result1[:params]['id']).to eq('123')
+    end
+
+    it 'handles cache eviction when cache gets large' do
+      # Add many routes to trigger cache eviction
+      (1..10000).each do |i|
+        route_set.match('GET', "/path#{i}")
+      end
+      
+      stats = route_set.cache_stats
+      expect(stats[:size]).to be < 10000
+    end
+  end
+
+  describe 'constraint handling' do
+    it 'handles routes with constraints' do
+      route = RubyRoutes::RadixTree.new('/users/:id', to: 'users#show', constraints: { id: /\d+/ })
+      route_set.add_route(route)
+      
+      expect(route.constraints[:id]).to eq(/\d+/)
+    end
+  end
 end

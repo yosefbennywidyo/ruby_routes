@@ -168,5 +168,83 @@ RSpec.describe RubyRoutes::Router do
       routes = router.route_set.routes
       expect(routes.any? { |r| r.path == '/posts/:id/comments' }).to be true
     end
+
+    it 'handles undefined concern gracefully' do
+      expect {
+        router.concerns :undefined_concern
+      }.to raise_error(NoMethodError)
+    end
+
+    it 'handles multiple concerns' do
+      router.concern :commentable do
+        resources :comments
+      end
+
+      router.concern :likeable do
+        post '/like', to: 'likes#create'
+      end
+
+      router.resources :posts do
+        concerns :commentable, :likeable
+      end
+
+      routes = router.route_set.routes
+      expect(routes.any? { |r| r.path == '/posts/:id/comments' }).to be true
+      expect(routes.any? { |r| r.path == '/posts/:id/like' }).to be true
+    end
+  end
+
+  describe '#mount' do
+    it 'mounts an application at a path' do
+      app = double('app')
+      router.mount(app, at: '/api')
+
+      route = router.route_set.routes.first
+      expect(route.path).to eq('/api/*path')
+    end
+
+    it 'mounts with default path based on app name' do
+      router.mount('MyApp')
+
+      route = router.route_set.routes.first
+      expect(route.path).to eq('/MyApp/*path')
+    end
+  end
+
+  describe 'nested resources with block' do
+    it 'handles nested resources with block' do
+      router.resources :categories do
+        resources :products
+      end
+
+      routes = router.route_set.routes
+      expect(routes.any? { |r| r.path == '/categories/:id/products' }).to be true
+      expect(routes.any? { |r| r.path == '/categories/:id/products/:id' }).to be true
+    end
+  end
+
+  describe 'scope combinations' do
+    it 'handles nested scopes' do
+      router.scope path: '/api' do
+        scope path: '/v1' do
+          get '/users', to: 'users#index'
+        end
+      end
+
+      route = router.route_set.routes.first
+      expect(route.path).to eq('/api/v1/users')
+    end
+
+    it 'combines constraints and defaults' do
+      router.constraints(id: /\d+/) do
+        defaults(format: 'json') do
+          get '/users/:id', to: 'users#show'
+        end
+      end
+
+      route = router.route_set.routes.first
+      expect(route.constraints[:id]).to eq(/\d+/)
+      expect(route.defaults['format']).to eq('json')
+    end
   end
 end
