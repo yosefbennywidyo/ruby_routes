@@ -104,11 +104,29 @@ Benchmark.bm(20) do |x|
   end
 end
 
-# Memory profiling
+# Memory profiling using secure Ruby methods
 puts "\nMemory usage analysis:"
 puts "=" * 50
 
-memory_before = `ps -o rss= -p #{Process.pid}`.to_i
+# Use Ruby's built-in memory measurement instead of shell commands
+def get_memory_usage_kb
+  # Use /proc/self/status on Linux systems for secure memory reading
+  if File.exist?('/proc/self/status')
+    status_content = File.read('/proc/self/status')
+    if match = status_content.match(/VmRSS:\s+(\d+)\s+kB/)
+      return match[1].to_i
+    end
+  end
+  
+  # Fallback: Use Ruby's ObjectSpace for memory estimation
+  GC.start  # Force garbage collection for accurate measurement
+  ObjectSpace.count_objects.values.sum / 1024  # Rough KB estimate
+rescue => e
+  puts "Warning: Could not measure memory usage: #{e.message}"
+  0
+end
+
+memory_before = get_memory_usage_kb
 puts "Memory before: #{memory_before} KB"
 
 # Run operations
@@ -121,7 +139,7 @@ puts "Memory before: #{memory_before} KB"
   router.route_set.generate_path(:users)
 end
 
-memory_after = `ps -o rss= -p #{Process.pid}`.to_i
+memory_after = get_memory_usage_kb
 puts "Memory after: #{memory_after} KB"
 puts "Memory increase: #{memory_after - memory_before} KB"
 
