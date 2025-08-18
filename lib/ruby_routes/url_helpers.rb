@@ -39,9 +39,19 @@ module RubyRoutes
     def button_to(name, text, params = {})
       path = path_to(name, params)
       method = params.delete(:method) || :post
+      method = method.to_s.downcase
 
-      html = "<form action=\"#{path}\" method=\"#{method}\">"
-      html += "<input type=\"hidden\" name=\"_method\" value=\"#{method}\">" if method != :get
+      # HTML forms only support GET and POST
+      # For other methods, use POST with _method hidden field
+      form_method = (method == 'get') ? 'get' : 'post'
+      
+      html = "<form action=\"#{path}\" method=\"#{form_method}\">"
+      
+      # Add _method hidden field for non-GET/POST methods
+      if method != 'get' && method != 'post'
+        html += "<input type=\"hidden\" name=\"_method\" value=\"#{method}\">"
+      end
+      
       html += "<button type=\"submit\">#{text}</button>"
       html += "</form>"
       html

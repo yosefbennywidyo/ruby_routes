@@ -117,16 +117,32 @@ RSpec.describe RubyRoutes::UrlHelpers do
       button = helper.button_to(:user, 'Delete User', id: '123')
       
       expect(button).to include('<form action="/users/123" method="post">')
-      expect(button).to include('<input type="hidden" name="_method" value="post">')
+      expect(button).not_to include('<input type="hidden" name="_method"')
       expect(button).to include('<button type="submit">Delete User</button>')
       expect(button).to include('</form>')
     end
 
-    it 'generates form with custom method' do
+    it 'generates form with PATCH method using POST + _method hidden field' do
       button = helper.button_to(:user, 'Update User', id: '123', method: :patch)
       
-      expect(button).to include('<form action="/users/123" method="patch">')
+      expect(button).to include('<form action="/users/123" method="post">')
       expect(button).to include('<input type="hidden" name="_method" value="patch">')
+      expect(button).to include('<button type="submit">Update User</button>')
+    end
+
+    it 'generates form with DELETE method using POST + _method hidden field' do
+      button = helper.button_to(:user, 'Delete User', id: '123', method: :delete)
+      
+      expect(button).to include('<form action="/users/123" method="post">')
+      expect(button).to include('<input type="hidden" name="_method" value="delete">')
+      expect(button).to include('<button type="submit">Delete User</button>')
+    end
+
+    it 'generates form with PUT method using POST + _method hidden field' do
+      button = helper.button_to(:user, 'Update User', id: '123', method: :put)
+      
+      expect(button).to include('<form action="/users/123" method="post">')
+      expect(button).to include('<input type="hidden" name="_method" value="put">')
       expect(button).to include('<button type="submit">Update User</button>')
     end
 
@@ -138,10 +154,18 @@ RSpec.describe RubyRoutes::UrlHelpers do
       expect(button).to include('<button type="submit">View User</button>')
     end
 
+    it 'handles string methods correctly' do
+      button = helper.button_to(:user, 'Update', id: '123', method: 'PATCH')
+      
+      expect(button).to include('<form action="/users/123" method="post">')
+      expect(button).to include('<input type="hidden" name="_method" value="patch">')
+    end
+
     it 'removes method from params when generating path' do
       # This tests that method is deleted from params before path generation
       button = helper.button_to(:user, 'Delete', id: '123', method: :delete)
       expect(button).to include('/users/123')
+      expect(button).not_to include('method=delete') # Should not appear in URL
     end
   end
 
