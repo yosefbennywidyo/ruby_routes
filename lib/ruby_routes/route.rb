@@ -1,4 +1,5 @@
 require 'uri'
+require 'timeout'
 require_relative 'route/small_lru'
 
 module RubyRoutes
@@ -364,18 +365,37 @@ module RubyRoutes
     def validate_constraints_fast!(params)
       @constraints.each do |param, constraint|
         value = params[param.to_s]
-        next unless value
+        # Only skip validation if the parameter is completely missing from params
+        # Empty strings and nil values should still be validated
+        next unless params.key?(param.to_s)
 
         case constraint
         when Regexp
-          raise ConstraintViolation unless constraint.match?(value)
+          # Protect against ReDoS attacks with timeout
+          begin
+            Timeout.timeout(0.1) do
+              raise RubyRoutes::ConstraintViolation unless constraint.match?(value.to_s)
+            end
+          rescue Timeout::Error
+            raise RubyRoutes::ConstraintViolation, "Regex constraint timed out (potential ReDoS attack)"
+          end
         when Proc
-          raise ConstraintViolation unless constraint.call(value)
+          # WARNING: Proc constraints can execute arbitrary code and pose security risks
+          # Consider using regex or built-in constraint types instead
+          begin
+            Timeout.timeout(0.1) do
+              raise RubyRoutes::ConstraintViolation unless constraint.call(value.to_s)
+            end
+          rescue Timeout::Error
+            raise RubyRoutes::ConstraintViolation, "Proc constraint timed out"
+          end
         when :int
-          raise ConstraintViolation unless value.match?(/\A\d+\z/)
+          value_str = value.to_s
+          raise RubyRoutes::ConstraintViolation unless value_str.match?(/\A\d+\z/)
         when :uuid
-          raise ConstraintViolation unless value.length == 36 &&
-                 value.match?(/\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z/i)
+          value_str = value.to_s
+          raise RubyRoutes::ConstraintViolation unless value_str.length == 36 &&
+                 value_str.match?(/\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z/i)
         end
       end
     end

@@ -11,6 +11,7 @@ module RubyRoutes
   class Error < StandardError; end
   class RouteNotFound < Error; end
   class InvalidRoute < Error; end
+  class ConstraintViolation < Error; end
 
   # Create a new router instance
   def self.new(&block)

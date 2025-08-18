@@ -149,29 +149,29 @@ module RubyRoutes
 
     # Optimized cache key building - avoid string interpolation
     def build_cache_key(method, path)
-      # Use frozen string concatenation to avoid allocations
-      @cache_key_buffer ||= String.new(capacity: 256)
-      @cache_key_buffer.clear
-      @cache_key_buffer << method << ':' << path
-      @cache_key_buffer.dup.freeze
+      # Use thread-local buffer to avoid race conditions
+      buffer = Thread.current[:ruby_routes_cache_key_buffer] ||= String.new(capacity: 256)
+      buffer.clear
+      buffer << method << ':' << path
+      buffer.dup.freeze
     end
 
     # Get thread-local params hash, reusing when possible
     def get_thread_local_params
-      # Use object pool to reduce GC pressure
-      @params_pool ||= []
-      if @params_pool.empty?
+      # Use thread-local object pool to avoid race conditions
+      pool = Thread.current[:ruby_routes_params_pool] ||= []
+      if pool.empty?
         {}
       else
-        hash = @params_pool.pop
+        hash = pool.pop
         hash.clear
         hash
       end
     end
 
     def return_params_to_pool(params)
-      @params_pool ||= []
-      @params_pool.push(params) if @params_pool.size < 10
+      pool = Thread.current[:ruby_routes_params_pool] ||= []
+      pool.push(params) if pool.size < 10
     end
 
     # Fast defaults merging

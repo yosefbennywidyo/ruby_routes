@@ -207,6 +207,35 @@ RSpec.describe RubyRoutes::UrlHelpers do
     end
   end
 
+  describe 'security fixes' do
+    it 'escapes HTML in href attributes to prevent attribute injection' do
+      # Mock path_to to return a malicious path
+      allow(helper).to receive(:path_to).and_return('"/><script>alert("XSS")</script><a href="')
+      
+      link = helper.link_to(:user, 'Click me')
+      expect(link).to eq('<a href="&quot;/&gt;&lt;script&gt;alert(&quot;XSS&quot;)&lt;/script&gt;&lt;a href=&quot;">Click me</a>')
+      expect(link).not_to include('<script>')
+    end
+
+    it 'escapes HTML in form action attributes' do
+      allow(helper).to receive(:path_to).and_return('"/><script>alert("XSS")</script><form action="')
+      
+      button = helper.button_to(:user, 'Submit')
+      expect(button).to include('action="&quot;/&gt;&lt;script&gt;alert(&quot;XSS&quot;)&lt;/script&gt;&lt;form action=&quot;"')
+      expect(button).not_to include('<script>')
+    end
+
+    it 'escapes HTML in method values' do
+      malicious_method = 'delete"><script>alert("XSS")</script><input value="'
+      button = helper.button_to(:user, 'Delete', id: '123', method: malicious_method)
+      
+      # Should escape the malicious method value
+      expect(button).to include('value="delete&quot;&gt;&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;&lt;input value=&quot;"')
+      expect(button).not_to include('<script>')
+      expect(button).not_to include('"><script>')
+    end
+  end
+
   describe '#redirect_to' do
     it 'generates redirect hash with status and location' do
       redirect = helper.redirect_to(:user, id: '123')

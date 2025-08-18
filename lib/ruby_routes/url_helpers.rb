@@ -35,8 +35,9 @@ module RubyRoutes
 
     def link_to(name, text, params = {})
       path = path_to(name, params)
+      safe_path = CGI.escapeHTML(path.to_s)
       safe_text = CGI.escapeHTML(text.to_s)
-      "<a href=\"#{path}\">#{safe_text}</a>"
+      "<a href=\"#{safe_path}\">#{safe_text}</a>"
     end
 
     def button_to(name, text, params = {})
@@ -49,13 +50,16 @@ module RubyRoutes
       # For other methods, use POST with _method hidden field
       form_method = (method == 'get') ? 'get' : 'post'
       
-      html = "<form action=\"#{path}\" method=\"#{form_method}\">"
+      safe_path = CGI.escapeHTML(path.to_s)
+      safe_form_method = CGI.escapeHTML(form_method)
+      html = "<form action=\"#{safe_path}\" method=\"#{safe_form_method}\">"
       
       # Add _method hidden field for non-GET/POST methods
       if method != 'get' && method != 'post'
-        html += "<input type=\"hidden\" name=\"_method\" value=\"#{method}\">"
+        safe_method = CGI.escapeHTML(method)
+        html += "<input type=\"hidden\" name=\"_method\" value=\"#{safe_method}\">"
       end
-      
+
       safe_text = CGI.escapeHTML(text.to_s)
       html += "<button type=\"submit\">#{safe_text}</button>"
       html += "</form>"
