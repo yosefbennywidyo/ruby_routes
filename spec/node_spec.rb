@@ -53,12 +53,11 @@ RSpec.describe RubyRoutes::Node do
       expect(node.get_handler('GET')).to eq({ controller: 'users', action: 'index' })
     end
 
-    it 'overwrites handler for the same method' do
-      first = { controller: 'users', action: 'old' }
-      second = { controller: 'users', action: 'new' }
-      node.add_handler(:get, first)
-      node.add_handler(:get, second)
-      expect(node.get_handler('GET')).to eq(second)
+    it 'requires uppercase string for get_handler when given a symbol' do
+      handler = { controller: 'users', action: 'index' }
+      node.add_handler(:get, handler)
+      expect(node.get_handler(:get)).to be_nil
+      expect(node.get_handler('GET')).to eq(handler)
     end
   end
 end
