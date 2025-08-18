@@ -8,7 +8,7 @@ A lightweight, flexible routing system for Ruby that provides a Rails-like DSL f
 - **HTTP Method Support**: GET, POST, PUT, PATCH, DELETE, and custom methods
 - **RESTful Resources**: Automatic generation of RESTful routes
 - **Nested Routes**: Support for nested resources and namespaces
-- **Route Constraints**: Add constraints to routes (regex, etc.)
+- **Secure Route Constraints**: Powerful constraint system with built-in security ([see CONSTRAINTS.md](CONSTRAINTS.md))
 - **Named Routes**: Generate URLs from route names
 - **Path Generation**: Build URLs with parameters
 - **Scope Support**: Group routes with common options
@@ -116,14 +116,91 @@ end
 # etc.
 ```
 
-### Scopes and Constraints
+### Route Constraints
+
+Ruby Routes provides a powerful and secure constraint system to validate route parameters. **For security reasons, Proc constraints are deprecated** - use the secure alternatives below.
+
+#### Built-in Constraint Types
 
 ```ruby
 router = RubyRoutes.draw do
-  scope constraints: { id: /\d+/ } do
-    get '/users/:id', to: 'users#show'
-  end
+  # Integer validation
+  get '/users/:id', to: 'users#show', constraints: { id: :int }
   
+  # UUID validation
+  get '/resources/:uuid', to: 'resources#show', constraints: { uuid: :uuid }
+  
+  # Email validation
+  get '/users/:email', to: 'users#show', constraints: { email: :email }
+  
+  # URL-friendly slug validation
+  get '/posts/:slug', to: 'posts#show', constraints: { slug: :slug }
+  
+  # Alphabetic characters only
+  get '/categories/:name', to: 'categories#show', constraints: { name: :alpha }
+  
+  # Alphanumeric characters only
+  get '/codes/:code', to: 'codes#show', constraints: { code: :alphanumeric }
+end
+```
+
+#### Hash-based Constraints (Recommended)
+
+```ruby
+router = RubyRoutes.draw do
+  # Length constraints
+  get '/users/:username', to: 'users#show',
+      constraints: { 
+        username: { 
+          min_length: 3, 
+          max_length: 20,
+          format: /\A[a-zA-Z0-9_]+\z/
+        } 
+      }
+
+  # Allowed values (whitelist)
+  get '/posts/:status', to: 'posts#show',
+      constraints: { 
+        status: { in: %w[draft published archived] }
+      }
+
+  # Numeric ranges
+  get '/products/:price', to: 'products#show',
+      constraints: { 
+        price: { range: 1..10000 }
+      }
+end
+```
+
+#### Regular Expression Constraints
+
+```ruby
+router = RubyRoutes.draw do
+  # Custom regex pattern (with ReDoS protection)
+  get '/products/:sku', to: 'products#show', 
+      constraints: { sku: /\A[A-Z]{2}\d{4}\z/ }
+end
+```
+
+#### ⚠️ Security Notice: Proc Constraints Deprecated
+
+```ruby
+# ❌ DEPRECATED - Security risk!
+get '/users/:id', to: 'users#show',
+    constraints: { id: ->(value) { value.to_i > 0 } }
+
+# ✅ Use secure alternatives instead:
+get '/users/:id', to: 'users#show',
+    constraints: { id: { range: 1..Float::INFINITY } }
+```
+
+**📚 For complete constraint documentation, see [CONSTRAINTS.md](CONSTRAINTS.md)**  
+**🔄 For migration help, see [MIGRATION_GUIDE.md](MIGRATION_GUIDE.md)**
+
+### Scopes
+
+```ruby
+router = RubyRoutes.draw do
   scope defaults: { format: 'html' } do
     get '/posts', to: 'posts#index'
   end
@@ -273,12 +350,37 @@ Creates a new router instance and yields to the block for route definition.
 - `find_route(method, path)` - Finds a specific route
 - `find_named_route(name)` - Finds a named route
 
-## Examples
+## Documentation
+
+### Core Documentation
+- **[CONSTRAINTS.md](CONSTRAINTS.md)** - Complete guide to route constraints and security best practices
+- **[MIGRATION_GUIDE.md](MIGRATION_GUIDE.md)** - Step-by-step guide for migrating from deprecated Proc constraints
+
+### Examples
 
 See the `examples/` directory for more detailed examples:
 
 - `examples/basic_usage.rb` - Basic routing examples
 - `examples/rack_integration.rb` - Full Rack application example
+
+## Security
+
+Ruby Routes prioritizes security and has implemented several protections:
+
+### 🔒 Security Features
+- **XSS Protection**: All HTML output is properly escaped
+- **ReDoS Protection**: Regular expression constraints have timeout protection
+- **Secure Constraints**: Deprecated dangerous Proc constraints in favor of secure alternatives
+- **Thread Safety**: All caching and shared resources are thread-safe
+- **Input Validation**: Comprehensive parameter validation before reaching application code
+
+### ⚠️ Important Security Notice
+**Proc constraints are deprecated due to security risks** and will be removed in a future version. They allow arbitrary code execution which can be exploited for:
+- Code injection attacks
+- Denial of service attacks
+- System compromise
+
+**Migration Required**: If you're using Proc constraints, please migrate to secure alternatives using our [Migration Guide](MIGRATION_GUIDE.md).
 
 ## Testing
 
@@ -287,6 +389,8 @@ Run the test suite:
 ```bash
 bundle exec rspec
 ```
+
+The test suite includes comprehensive security tests to ensure all protections are working correctly.
 
 ## Contributing
 
