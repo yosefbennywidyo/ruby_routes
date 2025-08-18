@@ -36,14 +36,15 @@ RSpec.describe RubyRoutes::Node do
     end
 
     it 'handles multiple methods on same node' do
-      get_handler_payload = { controller: 'users', action: 'show' }
-      put_handler_payload = { controller: 'users', action: 'update' }
+      get_handler = { controller: 'users', action: 'show' }
+      put_handler = { controller: 'users', action: 'update' }
 
-      node.add_handler(:get, get_handler_payload)
-      node.add_handler(:put, put_handler_payload)
+      node.add_handler(:get, get_handler)
+      node.add_handler(:put, put_handler)
 
-      expect(node.get_handler('GET')).to eq(get_handler_payload)
-      expect(node.get_handler('PUT')).to eq(put_handler_payload)
+      expect(node.get_handler('GET')).to eq(get_handler)
+      expect(node.get_handler('PUT')).to eq(put_handler)
+      expect(node.is_endpoint).to be true
     end
 
     it 'does not normalize in get_handler (requires upstream normalization)' do
