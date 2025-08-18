@@ -42,9 +42,9 @@ module RubyRoutes
 
     # Descriptor factories for segment classification (O(1) dispatch by first byte).
     DESCRIPTOR_FACTORIES = {
-      42 => ->(s) { { type: :splat,  name: (s[1..-1] || 'splat') } }, # '*'
-      58 => ->(s) { { type: :param,  name:   s[1..-1] } },             # ':'
-      :default => ->(s) { { type: :static, value:  s } }
+      42 => ->(s) { { type: :splat,  name: (s[1..-1] || 'splat').freeze } }, # '*'
+      58 => ->(s) { { type: :param,  name:   s[1..-1].freeze } },             # ':'
+      :default => ->(s) { { type: :static, value:  s.freeze } }  # Intern static values
     }.freeze
 
     def self.segment_descriptor(raw)

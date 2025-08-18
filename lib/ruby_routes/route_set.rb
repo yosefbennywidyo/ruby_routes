@@ -42,16 +42,10 @@ module RubyRoutes
       # Optimized cache key: avoid string interpolation when possible
       cache_key = build_cache_key(method_up, request_path)
 
-      # Cache hit: return immediately
-      if (cached = @recognition_cache[cache_key])
+      # Cache hit: return immediately (cached result includes full structure)
+      if (cached_result = @recognition_cache[cache_key])
         @cache_hits += 1
-        cached_route, cached_params = cached
-        return {
-          route: cached_route,
-          params: cached_params,
-          controller: cached_route.controller,
-          action: cached_route.action
-        }
+        return cached_result
       end
 
       @cache_misses += 1
@@ -71,17 +65,17 @@ module RubyRoutes
         merge_query_params(route, request_path, params)
       end
 
-      # Create return hash and cache entry
+      # Create return hash and cache the complete result
       result_params = params.dup
-      cache_entry = [route, result_params.freeze]
-      insert_cache_entry(cache_key, cache_entry)
-
-      {
+      result = {
         route: route,
         params: result_params,
         controller: route.controller,
         action: route.action
-      }
+      }.freeze
+      
+      insert_cache_entry(cache_key, result)
+      result
     end
 
     def recognize_path(path, method = :get)
@@ -141,7 +135,7 @@ module RubyRoutes
 
     private
 
-    # Method lookup table to avoid repeated upcasing
+    # Method lookup table to avoid repeated upcasing with interned strings
     def method_lookup(method)
       @method_cache ||= Hash.new { |h, k| h[k] = k.to_s.upcase.freeze }
       @method_cache[method]
@@ -149,29 +143,21 @@ module RubyRoutes
 
     # Optimized cache key building - avoid string interpolation
     def build_cache_key(method, path)
-      # Use thread-local buffer to avoid race conditions
-      buffer = Thread.current[:ruby_routes_cache_key_buffer] ||= String.new(capacity: 256)
-      buffer.clear
-      buffer << method << ':' << path
-      buffer.dup.freeze
+      # Use string interpolation which is faster than buffer + dup + freeze
+      # String interpolation creates a new string directly without intermediate allocations
+      "#{method}:#{path}".freeze
     end
 
     # Get thread-local params hash, reusing when possible
     def get_thread_local_params
-      # Use thread-local object pool to avoid race conditions
-      pool = Thread.current[:ruby_routes_params_pool] ||= []
-      if pool.empty?
-        {}
-      else
-        hash = pool.pop
-        hash.clear
-        hash
-      end
+      # Use single thread-local hash that gets cleared, avoiding pool management overhead
+      hash = Thread.current[:ruby_routes_params_hash] ||= {}
+      hash.clear
+      hash
     end
 
     def return_params_to_pool(params)
-      pool = Thread.current[:ruby_routes_params_pool] ||= []
-      pool.push(params) if pool.size < 10
+      # No-op since we're using a single reusable hash per thread
     end
 
     # Fast defaults merging

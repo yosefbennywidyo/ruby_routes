@@ -103,19 +103,28 @@ module RubyRoutes
     ROOT_PATH = '/'.freeze
     UNRESERVED_RE = /\A[a-zA-Z0-9\-._~]+\z/.freeze
     QUERY_CACHE_SIZE = 128
+    
+    # Common HTTP methods - interned for performance
+    HTTP_GET = 'GET'.freeze
+    HTTP_POST = 'POST'.freeze
+    HTTP_PUT = 'PUT'.freeze
+    HTTP_PATCH = 'PATCH'.freeze
+    HTTP_DELETE = 'DELETE'.freeze
+    HTTP_HEAD = 'HEAD'.freeze
+    HTTP_OPTIONS = 'OPTIONS'.freeze
 
-    # Fast method normalization
+    # Fast method normalization using interned constants
     def normalize_method(method)
       case method
-      when :get then 'GET'
-      when :post then 'POST'
-      when :put then 'PUT'
-      when :patch then 'PATCH'
-      when :delete then 'DELETE'
-      when :head then 'HEAD'
-      when :options then 'OPTIONS'
-      else method.to_s.upcase
-      end.freeze
+      when :get then HTTP_GET
+      when :post then HTTP_POST
+      when :put then HTTP_PUT
+      when :patch then HTTP_PATCH
+      when :delete then HTTP_DELETE
+      when :head then HTTP_HEAD
+      when :options then HTTP_OPTIONS
+      else method.to_s.upcase.freeze
+      end
     end
 
     # Pre-compile all route data at initialization
@@ -186,9 +195,20 @@ module RubyRoutes
     end
 
     def get_thread_local_hash
-      hash = Thread.current[:ruby_routes_params] ||= {}
-      hash.clear
-      hash
+      # Use a pool of hashes to reduce allocations
+      pool = Thread.current[:ruby_routes_hash_pool] ||= []
+      if pool.empty?
+        {}
+      else
+        hash = pool.pop
+        hash.clear
+        hash
+      end
+    end
+
+    def return_hash_to_pool(hash)
+      pool = Thread.current[:ruby_routes_hash_pool] ||= []
+      pool.push(hash) if pool.size < 5  # Keep pool small to avoid memory bloat
     end
 
     def merge_defaults_fast(result)
@@ -248,10 +268,18 @@ module RubyRoutes
       return @defaults if params.empty?
 
       merged = get_thread_local_merged_hash
+      
+      # Merge defaults first if they exist
       merged.update(@defaults) unless @defaults.empty?
 
-      # Convert param keys to strings efficiently
-      params.each { |k, v| merged[k.to_s] = v }
+      # Use merge! with transform_keys for better performance
+      if params.respond_to?(:transform_keys)
+        merged.merge!(params.transform_keys(&:to_s))
+      else
+        # Fallback for older Ruby versions
+        params.each { |k, v| merged[k.to_s] = v }
+      end
+      
       merged
     end
 
@@ -263,67 +291,59 @@ module RubyRoutes
 
     # Fast cache key building with minimal allocations
     def build_cache_key_fast(merged)
-      # Use instance variable buffer to avoid repeated allocations
-      @cache_key_buffer ||= String.new(capacity: 128)
-      @cache_key_buffer.clear
+      return '' if @required_params.empty?
 
-      return @cache_key_buffer.dup if @required_params.empty?
-
-      @required_params.each_with_index do |name, idx|
-        @cache_key_buffer << '|' unless idx.zero?
+      # Use array join which is faster than string concatenation
+      parts = @required_params.map do |name|
         value = merged[name]
-        @cache_key_buffer << (value.is_a?(Array) ? value.join('/') : value.to_s) if value
+        value.is_a?(Array) ? value.join('/') : value.to_s
       end
-      @cache_key_buffer.dup
+      parts.join('|')
     end
 
     # Optimized path generation
     def generate_path_string(merged)
       return ROOT_PATH if @compiled_segments.empty?
 
-      buffer = String.new(capacity: 128)
-      buffer << '/'
-
-      @compiled_segments.each_with_index do |seg, idx|
-        buffer << '/' unless idx.zero?
-
+      # Pre-allocate array for parts to avoid string buffer operations
+      parts = []
+      
+      @compiled_segments.each do |seg|
         case seg[:type]
         when :static
-          buffer << seg[:value]
+          parts << seg[:value]
         when :param
           value = merged.fetch(seg[:name]).to_s
-          buffer << encode_segment_fast(value)
+          parts << encode_segment_fast(value)
         when :splat
           value = merged.fetch(seg[:name], '')
-          append_splat_value(buffer, value)
+          parts << format_splat_value(value)
         end
       end
 
-      buffer == '/' ? ROOT_PATH : buffer
+      # Single join operation is faster than multiple string concatenations
+      path = "/#{parts.join('/')}"
+      path == '/' ? ROOT_PATH : path
     end
 
-    def append_splat_value(buffer, value)
+    def format_splat_value(value)
       case value
       when Array
-        value.each_with_index do |part, idx|
-          buffer << '/' unless idx.zero?
-          buffer << encode_segment_fast(part.to_s)
-        end
+        value.map { |part| encode_segment_fast(part.to_s) }.join('/')
       when String
-        parts = value.split('/')
-        parts.each_with_index do |part, idx|
-          buffer << '/' unless idx.zero?
-          buffer << encode_segment_fast(part)
-        end
+        value.split('/').map { |part| encode_segment_fast(part) }.join('/')
       else
-        buffer << encode_segment_fast(value.to_s)
+        encode_segment_fast(value.to_s)
       end
     end
 
-    # Fast segment encoding
+    # Fast segment encoding with caching for common values
     def encode_segment_fast(str)
       return str if UNRESERVED_RE.match?(str)
-      URI.encode_www_form_component(str)
+      
+      # Cache encoded segments to avoid repeated encoding
+      @encoding_cache ||= {}
+      @encoding_cache[str] ||= URI.encode_www_form_component(str)
     end
 
     # Optimized query params with caching

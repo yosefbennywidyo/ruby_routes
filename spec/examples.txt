@@ -100,6 +100,13 @@ example_id                              | status | run_time        |
 ./spec/node_spec.rb[1:5:12]             | passed | 0.00007 seconds |
 ./spec/node_spec.rb[1:5:13]             | passed | 0.00005 seconds |
 ./spec/node_spec.rb[1:5:14]             | passed | 0.00005 seconds |
+./spec/performance_spec.rb[1:1:1]       | passed | 0.00593 seconds |
+./spec/performance_spec.rb[1:1:2]       | passed | 0.00126 seconds |
+./spec/performance_spec.rb[1:2:1]       | passed | 0.00116 seconds |
+./spec/performance_spec.rb[1:3:1]       | passed | 0.03761 seconds |
+./spec/performance_spec.rb[1:4:1]       | passed | 0.00039 seconds |
+./spec/performance_spec.rb[1:4:2]       | passed | 0.00725 seconds |
+./spec/performance_spec.rb[1:5:1]       | passed | 0.00153 seconds |
 ./spec/radix_tree_spec.rb[1:1:1]        | passed | 0.0001 seconds  |
 ./spec/radix_tree_spec.rb[1:1:2]        | passed | 0.00011 seconds |
 ./spec/radix_tree_spec.rb[1:1:3]        | passed | 0.00012 seconds |
