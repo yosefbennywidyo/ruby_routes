@@ -142,19 +142,39 @@ RSpec.describe RubyRoutes::RouteSet do
   end
 
   describe '#clear!' do
-    it 'removes all routes' do
+    it 'removes all routes and resets state' do
       route1 = RubyRoutes::RadixTree.new('/users', to: 'users#index')
       route2 = RubyRoutes::RadixTree.new('/posts', to: 'posts#index')
 
       route_set.add_route(route1)
       route_set.add_route(route2)
 
+      # Trigger some cache activity
+      route_set.match('GET', '/users')
+      route_set.match('GET', '/posts')
+
       expect(route_set.size).to eq(2)
+      expect(route_set.empty?).to be false
 
       route_set.clear!
 
       expect(route_set.size).to eq(0)
       expect(route_set.empty?).to be true
+      
+      # Verify caches are cleared
+      stats = route_set.cache_stats
+      expect(stats[:hits]).to eq(0)
+      expect(stats[:misses]).to eq(0)
+      expect(stats[:size]).to eq(0)
+    end
+
+    it 'handles clearing empty route set' do
+      expect(route_set.empty?).to be true
+      
+      expect { route_set.clear! }.not_to raise_error
+      
+      expect(route_set.empty?).to be true
+      expect(route_set.size).to eq(0)
     end
   end
 
@@ -177,20 +197,6 @@ RSpec.describe RubyRoutes::RouteSet do
       route_set.add_route(route)
 
       expect(route_set.include?(route)).to be true
-    end
-  end
-
-  describe '#clear!' do
-    it 'clears all routes and caches' do
-      route = RubyRoutes::RadixTree.new('/users', to: 'users#index')
-      route_set.add_route(route)
-      
-      expect(route_set.size).to eq(1)
-      
-      route_set.clear!
-      
-      expect(route_set.size).to eq(0)
-      expect(route_set.empty?).to be true
     end
   end
 
