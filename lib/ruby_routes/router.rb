@@ -37,19 +37,20 @@ module RubyRoutes
     # Resources routing (Rails-like)
     def resources(name, options = {}, &block)
       singular = name.to_s.singularize
-      plural = name.to_s.pluralize
+      plural = (options[:path] || name.to_s.pluralize)
+      controller = options[:controller] || plural
 
       # Collection routes
-      get "/#{plural}", options.merge(to: "#{plural}#index")
-      get "/#{plural}/new", options.merge(to: "#{plural}#new")
-      post "/#{plural}", options.merge(to: "#{plural}#create")
+      get "/#{plural}", options.merge(to: "#{controller}#index")
+      get "/#{plural}/new", options.merge(to: "#{controller}#new")
+      post "/#{plural}", options.merge(to: "#{controller}#create")
 
       # Member routes
-      get "/#{plural}/:id", options.merge(to: "#{plural}#show")
-      get "/#{plural}/:id/edit", options.merge(to: "#{plural}#edit")
-      put "/#{plural}/:id", options.merge(to: "#{plural}#update")
-      patch "/#{plural}/:id", options.merge(to: "#{plural}#update")
-      delete "/#{plural}/:id", options.merge(to: "#{plural}#destroy")
+      get "/#{plural}/:id", options.merge(to: "#{controller}#show")
+      get "/#{plural}/:id/edit", options.merge(to: "#{controller}#edit")
+      put "/#{plural}/:id", options.merge(to: "#{controller}#update")
+      patch "/#{plural}/:id", options.merge(to: "#{controller}#update")
+      delete "/#{plural}/:id", options.merge(to: "#{controller}#destroy")
 
       # Nested resources if specified
       if options[:nested]

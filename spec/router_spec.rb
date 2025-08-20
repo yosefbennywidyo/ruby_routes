@@ -114,12 +114,12 @@ RSpec.describe RubyRoutes::Router do
       expect(routes.any? { |r| r.path == '/posts/:id/comments/:nested_id/edit' && r.action == 'edit' }).to be true
       expect(routes.any? { |r| r.path == '/posts/:id/comments/:nested_id' && r.action == 'update' && r.methods.include?('PUT') }).to be true
       expect(routes.any? { |r| r.path == '/posts/:id/comments/:nested_id' && r.action == 'update' && r.methods.include?('PATCH') }).to be true
-      
+
       # Critical test: DELETE should only map to destroy action, not update
       delete_routes = routes.select { |r| r.path == '/posts/:id/comments/:nested_id' && r.methods.include?('DELETE') }
       expect(delete_routes.size).to eq(1)
       expect(delete_routes.first.action).to eq('destroy')
-      
+
       # Ensure no DELETE route maps to update action
       expect(routes.any? { |r| r.path == '/posts/:id/comments/:nested_id' && r.action == 'update' && r.methods.include?('DELETE') }).to be false
     end
@@ -274,6 +274,28 @@ RSpec.describe RubyRoutes::Router do
       route = router.route_set.routes.first
       expect(route.constraints[:id]).to eq(/\d+/)
       expect(route.defaults['format']).to eq('json')
+    end
+  end
+
+  describe 'resources with custom path and controller' do
+    it 'generates correct routes and controller/action mapping' do
+      router = RubyRoutes::Router.new do
+        resources :regulations, path: "peraturan", controller: "regulations", only: [:index, :show]
+      end
+
+      routes = router.route_set.routes
+
+      # Should generate /peraturan for index
+      index_route = routes.find { |r| r.path == '/peraturan' && r.methods.include?('GET') }
+      expect(index_route).not_to be_nil
+      expect(index_route.controller).to eq('regulations')
+      expect(index_route.action).to eq('index')
+
+      # Should generate /peraturan/:id for show
+      show_route = routes.find { |r| r.path == '/peraturan/:id' && r.methods.include?('GET') }
+      expect(show_route).not_to be_nil
+      expect(show_route.controller).to eq('regulations')
+      expect(show_route.action).to eq('show')
     end
   end
 end
