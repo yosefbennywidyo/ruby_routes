@@ -14,8 +14,10 @@ class String
     case self
     when /y$/
       self.sub(/y$/, 'ies')
-    when /sh$/, /ch$/, /x$/, /z$/
+    when /sh$/, /ch$/, /x$/
       self + 'es'
+    when /z$/
+      self + 'zes'
     when /s$/
       # Words ending in 's' are already plural
       self

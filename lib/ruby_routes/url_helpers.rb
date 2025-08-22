@@ -4,6 +4,7 @@ module RubyRoutes
   module UrlHelpers
     def self.included(base)
       base.extend(ClassMethods)
+      base.include(base.url_helpers)
     end
 
     module ClassMethods
@@ -49,11 +50,11 @@ module RubyRoutes
       # HTML forms only support GET and POST
       # For other methods, use POST with _method hidden field
       form_method = (method == 'get') ? 'get' : 'post'
-      
+
       safe_path = CGI.escapeHTML(path.to_s)
       safe_form_method = CGI.escapeHTML(form_method)
       html = "<form action=\"#{safe_path}\" method=\"#{safe_form_method}\">"
-      
+
       # Add _method hidden field for non-GET/POST methods
       if method != 'get' && method != 'post'
         safe_method = CGI.escapeHTML(method)

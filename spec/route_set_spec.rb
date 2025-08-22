@@ -80,6 +80,18 @@ RSpec.describe RubyRoutes::RouteSet do
       result = route_set.match('GET', '/users')
       expect(result).to be_nil
     end
+
+    it 'merges query params into result params' do
+      route_set = RubyRoutes::RouteSet.new
+      route = RubyRoutes::RadixTree.new('/users/:id', to: 'users#show')
+      route_set.add_route(route)
+
+      result = route_set.match('GET', '/users/123?foo=bar&baz=qux')
+
+      expect(result[:params]['id']).to eq('123')
+      expect(result[:params]['foo']).to eq('bar')
+      expect(result[:params]['baz']).to eq('qux')
+    end
   end
 
   describe '#recognize_path' do
@@ -160,7 +172,7 @@ RSpec.describe RubyRoutes::RouteSet do
 
       expect(route_set.size).to eq(0)
       expect(route_set.empty?).to be true
-      
+
       # Verify caches are cleared
       stats = route_set.cache_stats
       expect(stats[:hits]).to eq(0)
@@ -170,9 +182,9 @@ RSpec.describe RubyRoutes::RouteSet do
 
     it 'handles clearing empty route set' do
       expect(route_set.empty?).to be true
-      
+
       expect { route_set.clear! }.not_to raise_error
-      
+
       expect(route_set.empty?).to be true
       expect(route_set.size).to eq(0)
     end
@@ -203,7 +215,7 @@ RSpec.describe RubyRoutes::RouteSet do
   describe '#cache_stats' do
     it 'returns cache statistics' do
       stats = route_set.cache_stats
-      
+
       expect(stats).to have_key(:hits)
       expect(stats).to have_key(:misses)
       expect(stats).to have_key(:hit_rate)
@@ -213,15 +225,15 @@ RSpec.describe RubyRoutes::RouteSet do
     it 'tracks cache hits and misses' do
       route = RubyRoutes::RadixTree.new('/users/:id', to: 'users#show')
       route_set.add_route(route)
-      
+
       # First match - cache miss
       route_set.match('GET', '/users/123')
       stats1 = route_set.cache_stats
-      
+
       # Second match - cache hit
       route_set.match('GET', '/users/123')
       stats2 = route_set.cache_stats
-      
+
       expect(stats2[:hits]).to be > stats1[:hits]
     end
   end
@@ -230,13 +242,13 @@ RSpec.describe RubyRoutes::RouteSet do
     it 'caches route matches for performance' do
       route = RubyRoutes::RadixTree.new('/users/:id', to: 'users#show')
       route_set.add_route(route)
-      
+
       # First call
       result1 = route_set.match('GET', '/users/123')
-      
+
       # Second call should use cache
       result2 = route_set.match('GET', '/users/123')
-      
+
       expect(result1).to eq(result2)
       expect(result1[:params]['id']).to eq('123')
     end
@@ -259,8 +271,75 @@ RSpec.describe RubyRoutes::RouteSet do
     it 'handles routes with constraints' do
       route = RubyRoutes::RadixTree.new('/users/:id', to: 'users#show', constraints: { id: /\d+/ })
       route_set.add_route(route)
-      
+
       expect(route.constraints[:id]).to eq(/\d+/)
+    end
+  end
+
+  describe '#insert_cache_entry' do
+    it 'evicts older entries when recognition cache exceeds maximum size' do
+      route_set = RubyRoutes::RouteSet.new
+
+      # Set an extremely small cache size to ensure eviction
+      small_max = 5
+      route_set.instance_variable_set(:@recognition_cache_max, small_max)
+
+      # Add many more entries than the max
+      route = RubyRoutes::Route.new('/users/:id', to: 'users#show')
+      route_set.add_route(route)
+
+      # Add entries in a way that we can verify eviction order
+      (small_max * 3).times do |i|
+        cache_key = "GET:/users/#{i}"
+        cache_entry = { route: route, params: { 'id' => i.to_s } }.freeze
+        route_set.send(:insert_cache_entry, cache_key, cache_entry)
+      end
+
+      # Verify cache size is at or below max
+      recognition_cache = route_set.instance_variable_get(:@recognition_cache)
+      expect(recognition_cache.size).to be <= small_max
+
+      expect(recognition_cache.key?("GET:/users/0")).to be false
+      expect(recognition_cache.key?("GET:/users/1")).to be false
+    end
+  end
+
+  describe '#merge_query_params' do
+    it 'uses query_params when available' do
+      route_set = RubyRoutes::RouteSet.new
+      params = {}
+
+      # Create a mock route that responds to query_params but not parse_query_params
+      route = double('Route')
+      allow(route).to receive(:respond_to?).with(:parse_query_params).and_return(false)
+      allow(route).to receive(:respond_to?).with(:query_params).and_return(true)
+
+      # Set up query_params to return some test data
+      query_params = { 'foo' => 'bar' }
+      allow(route).to receive(:query_params).with('/test?foo=bar').and_return(query_params)
+
+      # Call the private method
+      route_set.send(:merge_query_params, route, '/test?foo=bar', params)
+
+      # Verify query_params was called and results were merged
+      expect(route).to have_received(:query_params).with('/test?foo=bar')
+      expect(params).to eq({ 'foo' => 'bar' })
+    end
+
+    it 'does nothing when route responds to neither parse_query_params nor query_params' do
+      route_set = RubyRoutes::RouteSet.new
+      params = { 'existing' => 'value' }
+
+      # Create a mock route that responds to neither method
+      route = double('Route')
+      allow(route).to receive(:respond_to?).with(:parse_query_params).and_return(false)
+      allow(route).to receive(:respond_to?).with(:query_params).and_return(false)
+
+      # Call the private method
+      route_set.send(:merge_query_params, route, '/test?foo=bar', params)
+
+      # Params should remain unchanged
+      expect(params).to eq({ 'existing' => 'value' })
     end
   end
 end
