@@ -36,8 +36,13 @@ module RubyRoutes
     end
 
     def find(path, method, params_out = nil)
+      # Handle nil path and method cases
+      path ||= ''
+      method = method.to_s.upcase if method
+      # Strip query string before matching
+      clean_path = path.split('?', 2).first || ''
       # Fast path: root route
-      if path == '/' || path.empty?
+      if clean_path == '/' || clean_path.empty?
         handler = @root.get_handler(method)
         if @root.is_endpoint && handler
           return [handler, params_out || {}]
@@ -46,7 +51,7 @@ module RubyRoutes
         end
       end
 
-      segments = split_path_cached(path)
+      segments = split_path_cached(clean_path)
       current = @root
       params = params_out || {}
       params.clear if params_out

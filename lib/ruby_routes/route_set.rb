@@ -73,7 +73,7 @@ module RubyRoutes
         controller: route.controller,
         action: route.action
       }.freeze
-      
+
       insert_cache_entry(cache_key, result)
       result
     end
@@ -143,9 +143,8 @@ module RubyRoutes
 
     # Optimized cache key building - avoid string interpolation
     def build_cache_key(method, path)
-      # Use string interpolation which is faster than buffer + dup + freeze
       # String interpolation creates a new string directly without intermediate allocations
-      "#{method}:#{path}".freeze
+      "#{method}:#{path}"
     end
 
     # Get thread-local params hash, reusing when possible

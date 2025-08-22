@@ -1,6 +1,6 @@
 Gem::Specification.new do |spec|
   spec.name          = "ruby_routes"
-  spec.version       = "2.0.0"
+  spec.version       = "2.1.0"
   spec.authors       = ["Yosef Benny Widyokarsono"]
   spec.email         = ["yosefbennywidyo@gmail.com"]
   spec.summary       = "A Rails-like routing system for Ruby"
@@ -14,5 +14,6 @@ Gem::Specification.new do |spec|
 
   spec.add_development_dependency "rspec", "~> 3.12"
   spec.add_development_dependency "rake", "~> 13.0"
+  spec.add_development_dependency "rack", "~> 2.2"
   spec.add_development_dependency "simplecov", "~> 0.22"
 end
