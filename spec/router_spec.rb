@@ -298,4 +298,63 @@ RSpec.describe RubyRoutes::Router do
       expect(show_route.action).to eq('show')
     end
   end
+
+  describe '#namespace' do
+    it 'executes the block in the router context' do
+      router = RubyRoutes.draw do
+        namespace :admin do
+          get '/dashboard', to: 'dashboard#index'
+        end
+      end
+
+      # Verify the route was created with the namespace applied
+      route = router.route_set.routes.first
+      expect(route.path).to eq('/admin/dashboard')
+      expect(route.controller).to eq('admin/dashboard')
+      expect(route.action).to eq('index')
+    end
+
+    it 'supports nested namespaces' do
+      router = RubyRoutes.draw do
+        namespace :admin do
+          namespace :reports do
+            get '/summary', to: 'summary#index'
+          end
+        end
+      end
+
+      route = router.route_set.routes.first
+      expect(route.path).to eq('/admin/reports/summary')
+      expect(route.controller).to eq('admin/reports/summary')
+      expect(route.action).to eq('index')
+    end
+
+    describe '#namespace' do
+      it 'pushes namespace scope onto scope_stack' do
+        router = RubyRoutes::Router.new
+
+        # Verify empty scope stack before
+        expect(router.instance_variable_get(:@scope_stack).size).to eq(0)
+
+        # Use a variable to capture stack state from inside the block
+        stack_size_inside_block = nil
+        current_scope_inside_block = nil
+
+        # Call namespace with a block that captures information
+        router.namespace(:admin) do
+          # Store the current state in variables
+          stack_size_inside_block = @scope_stack.size
+          current_scope_inside_block = @scope_stack.last
+        end
+
+        # Verify the scope stack is empty after exiting the block
+        expect(router.instance_variable_get(:@scope_stack).size).to eq(0)
+
+        # Check that the variables captured the correct information
+        expect(stack_size_inside_block).to eq(1)
+        expect(current_scope_inside_block[:path]).to eq('/admin')
+        expect(current_scope_inside_block[:module]).to eq(:admin)
+      end
+    end
+  end
 end
