@@ -102,7 +102,14 @@ module RubyRoutes
     end
 
     # Scope support
-    def scope(options = {}, &block)
+    def scope(options_or_path = {}, &block)
+      # Handle the case where the first argument is a string (path)
+      options = if options_or_path.is_a?(String)
+                  { path: options_or_path }
+                else
+                  options_or_path
+                end
+
       @scope_stack.push(options)
 
       if block_given?
