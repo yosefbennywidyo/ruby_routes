@@ -1,9 +1,12 @@
+require_relative 'utility/route_utility'
+
 module RubyRoutes
   class Router
     attr_reader :route_set
 
     def initialize(&block)
       @route_set = RouteSet.new
+      @route_utils = RubyRoutes::Utility::RouteUtility.new(@route_set)
       @scope_stack = []
       @concerns = {}
       instance_eval(&block) if block_given?
@@ -172,14 +175,9 @@ module RubyRoutes
 
     private
 
-    def add_route(path, options = {})
-      # Apply current scope
-      scoped_options = apply_scope(path, options)
-
-      # Create and add the route
-      route = Route.new(scoped_options[:path], scoped_options)
-      @route_set.add_route(route)
-      route
+    def add_route(path, options={})
+      scoped = apply_scope(path, options)
+      @route_utils.define(scoped[:path], scoped)
     end
 
     def apply_scope(path, options)
