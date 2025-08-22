@@ -1,6 +1,7 @@
 require 'uri'
 require 'timeout'
 require 'set'
+require 'rack'
 require_relative 'route/small_lru'
 
 module RubyRoutes
@@ -33,6 +34,7 @@ module RubyRoutes
 
     def extract_params(request_path, parsed_qp = nil)
       path_params = extract_path_params_fast(request_path)
+
       return EMPTY_HASH unless path_params
 
       # Use optimized param building
@@ -103,7 +105,7 @@ module RubyRoutes
     ROOT_PATH = '/'.freeze
     UNRESERVED_RE = /\A[a-zA-Z0-9\-._~]+\z/.freeze
     QUERY_CACHE_SIZE = 128
-    
+
     # Common HTTP methods - interned for performance
     HTTP_GET = 'GET'.freeze
     HTTP_POST = 'POST'.freeze
@@ -220,17 +222,14 @@ module RubyRoutes
       return EMPTY_HASH if @compiled_segments.empty? && request_path == ROOT_PATH
       return nil if @compiled_segments.empty?
 
-      # Fast path normalization
       path_parts = split_path_fast(request_path)
-      
-      # Check if we have a wildcard/splat segment
+
+      # Check for wildcard/splat segment
       has_splat = @compiled_segments.any? { |seg| seg[:type] == :splat }
-      
+
       if has_splat
-        # For wildcard routes, path can have more parts than segments
         return nil if path_parts.size < @compiled_segments.size - 1
       else
-        # For non-wildcard routes, size must match exactly
         return nil if @compiled_segments.size != path_parts.size
       end
 
@@ -238,8 +237,8 @@ module RubyRoutes
     end
 
     def split_path_fast(request_path)
-      # Optimized path splitting
-      path = request_path
+      # Remove query string before splitting
+      path = request_path.split('?', 2).first
       path = path[1..-1] if path.start_with?('/')
       path = path[0...-1] if path.end_with?('/') && path != ROOT_PATH
       path.empty? ? [] : path.split('/')
@@ -268,7 +267,7 @@ module RubyRoutes
       return @defaults if params.empty?
 
       merged = get_thread_local_merged_hash
-      
+
       # Merge defaults first if they exist
       merged.update(@defaults) unless @defaults.empty?
 
@@ -279,7 +278,7 @@ module RubyRoutes
         # Fallback for older Ruby versions
         params.each { |k, v| merged[k.to_s] = v }
       end
-      
+
       merged
     end
 
@@ -307,7 +306,7 @@ module RubyRoutes
 
       # Pre-allocate array for parts to avoid string buffer operations
       parts = []
-      
+
       @compiled_segments.each do |seg|
         case seg[:type]
         when :static
@@ -340,10 +339,13 @@ module RubyRoutes
     # Fast segment encoding with caching for common values
     def encode_segment_fast(str)
       return str if UNRESERVED_RE.match?(str)
-      
+
       # Cache encoded segments to avoid repeated encoding
       @encoding_cache ||= {}
-      @encoding_cache[str] ||= URI.encode_www_form_component(str)
+      @encoding_cache[str] ||= begin
+        # Use URI.encode_www_form_component but replace + with %20 for path segments
+        URI.encode_www_form_component(str).gsub('+', '%20')
+      end
     end
 
     # Optimized query params with caching
@@ -352,7 +354,7 @@ module RubyRoutes
       return EMPTY_HASH unless query_start
 
       query_string = path[(query_start + 1)..-1]
-      return EMPTY_HASH if query_string.empty?
+      return EMPTY_HASH if query_string.empty? || query_string.match?(/^\?+$/)
 
       # Cache query param parsing
       if (cached = @query_cache.get(query_string))
@@ -403,7 +405,7 @@ module RubyRoutes
         when Proc
           # DEPRECATED: Proc constraints are deprecated due to security risks
           warn_proc_constraint_deprecation(param)
-          
+
           # For backward compatibility, still execute but with strict timeout
           begin
             Timeout.timeout(0.05) do  # Reduced timeout for security
@@ -442,23 +444,23 @@ module RubyRoutes
 
     def warn_proc_constraint_deprecation(param)
       return if @proc_warnings_shown&.include?(param)
-      
+
       @proc_warnings_shown ||= Set.new
       @proc_warnings_shown << param
-      
+
       warn <<~WARNING
         [DEPRECATION] Proc constraints are deprecated due to security risks.
-        
+
         Parameter: #{param}
         Route: #{@path}
-        
+
         Secure alternatives:
         - Use regex: constraints: { #{param}: /\\A\\d+\\z/ }
         - Use built-in types: constraints: { #{param}: :int }
         - Use hash constraints: constraints: { #{param}: { min_length: 3, format: /\\A[a-z]+\\z/ } }
-        
+
         Available built-in types: :int, :uuid, :email, :slug, :alpha, :alphanumeric
-        
+
         This warning will become an error in a future version.
       WARNING
     end
@@ -468,23 +470,23 @@ module RubyRoutes
       if constraint[:min_length] && value.length < constraint[:min_length]
         raise RubyRoutes::ConstraintViolation, "Value too short (minimum #{constraint[:min_length]} characters)"
       end
-      
+
       if constraint[:max_length] && value.length > constraint[:max_length]
         raise RubyRoutes::ConstraintViolation, "Value too long (maximum #{constraint[:max_length]} characters)"
       end
-      
+
       if constraint[:format] && !value.match?(constraint[:format])
         raise RubyRoutes::ConstraintViolation, "Value does not match required format"
       end
-      
+
       if constraint[:in] && !constraint[:in].include?(value)
         raise RubyRoutes::ConstraintViolation, "Value not in allowed list"
       end
-      
+
       if constraint[:not_in] && constraint[:not_in].include?(value)
         raise RubyRoutes::ConstraintViolation, "Value in forbidden list"
       end
-      
+
       if constraint[:range] && !constraint[:range].cover?(value.to_i)
         raise RubyRoutes::ConstraintViolation, "Value not in allowed range"
       end
