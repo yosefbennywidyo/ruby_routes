@@ -615,7 +615,7 @@ RSpec.describe RubyRoutes::Route do
       expect(route.instance_variable_get(:@encoding_cache)).to be_nil
 
       # Call the method which should initialize the cache
-      result1 = route.send(:encode_segment_fast, "John Doe")
+      route.send(:encode_segment_fast, "John Doe")
 
       # Verify cache was created
       cache = route.instance_variable_get(:@encoding_cache)
