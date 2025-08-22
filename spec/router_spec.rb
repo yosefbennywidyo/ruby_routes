@@ -221,6 +221,153 @@ RSpec.describe RubyRoutes::Router do
       expect(routes.any? { |r| r.path == '/posts/:id/comments' }).to be true
       expect(routes.any? { |r| r.path == '/posts/:id/like' }).to be true
     end
+
+    it 'calls all specified concerns' do
+      # Set up multiple concerns
+      router.concern :commentable do
+        post '/comments', to: 'comments#create'
+      end
+
+      router.concern :taggable do
+        get '/tags', to: 'tags#index'
+        post '/tags', to: 'tags#create'
+      end
+
+      router.concern :searchable do
+        get '/search', to: 'search#index'
+      end
+
+      # Use multiple concerns at once
+      router.resources :posts do
+        concerns :commentable, :taggable, :searchable
+      end
+
+      routes = router.route_set.routes
+
+      # Check that all concern routes were created
+      expect(routes.any? { |r| r.path == '/posts/:id/comments' && r.methods.include?('POST') }).to be true
+      expect(routes.any? { |r| r.path == '/posts/:id/tags' && r.methods.include?('GET') }).to be true
+      expect(routes.any? { |r| r.path == '/posts/:id/tags' && r.methods.include?('POST') }).to be true
+      expect(routes.any? { |r| r.path == '/posts/:id/search' && r.methods.include?('GET') }).to be true
+    end
+
+    it 'combines concerns with inline block' do
+      router.concern :votable do
+        post '/vote', to: 'votes#create'
+      end
+
+      # Pass both a concern name and a block
+      router.resources :articles do
+        concerns :votable do
+          # Additional routes defined inline
+          get '/stats', to: 'articles#stats'
+        end
+      end
+
+      routes = router.route_set.routes
+
+      # Verify both concern routes and block routes were created
+      expect(routes.any? { |r| r.path == '/articles/:id/vote' && r.methods.include?('POST') }).to be true
+      expect(routes.any? { |r| r.path == '/articles/:id/stats' && r.methods.include?('GET') }).to be true
+    end
+
+    it 'handles empty concerns list with only a block' do
+      # Using concerns with just a block, no named concerns
+      router.resources :products do
+        concerns do
+          get '/reviews', to: 'reviews#index'
+        end
+      end
+
+      routes = router.route_set.routes
+      expect(routes.any? { |r| r.path == '/products/:id/reviews' && r.methods.include?('GET') }).to be true
+    end
+
+    it 'raises error for each undefined concern' do
+      # Test that each undefined concern raises its own error
+      expect {
+        router.concerns :nonexistent1, :nonexistent2
+      }.to raise_error(RuntimeError, "Concern 'nonexistent1' not found")
+
+      # Define the first concern but not the second
+      router.concern :existent do
+        get '/exists', to: 'exists#index'
+      end
+
+      # Now the second undefined concern should raise an error
+      expect {
+        router.concerns :existent, :nonexistent2
+      }.to raise_error(RuntimeError, "Concern 'nonexistent2' not found")
+    end
+
+    it 'applies concerns directly in a scope' do
+      router.concern :testable do
+        get '/test', to: 'test#index'
+      end
+
+      router.scope '/api' do
+        concerns :testable
+      end
+
+      routes = router.route_set.routes
+      expect(routes.any? { |r| r.path == '/api/test' }).to be true
+    end
+
+    it 'applies concerns in the specified order' do
+      counter = 0
+      ordered_routes = []
+
+      router.concern :first do
+        ordered_routes << (counter += 1)
+        get '/first', to: 'first#index'
+      end
+
+      router.concern :second do
+        ordered_routes << (counter += 1)
+        get '/second', to: 'second#index'
+      end
+
+      router.concern :third do
+        ordered_routes << (counter += 1)
+        get '/third', to: 'third#index'
+      end
+
+      # Use scope instead of resources for more direct testing
+      router.scope '/ordered' do
+        concerns :first, :second, :third
+      end
+
+      # Verify concerns were applied in order
+      expect(ordered_routes).to eq([1, 2, 3])
+
+      routes = router.route_set.routes
+      expect(routes.any? { |r| r.path == '/ordered/first' }).to be true
+      expect(routes.any? { |r| r.path == '/ordered/second' }).to be true
+      expect(routes.any? { |r| r.path == '/ordered/third' }).to be true
+    end
+
+    # Add a dedicated test for resources + concerns
+    it 'applies concerns within resources' do
+      router.concern :commentable do
+        get '/comments', to: 'comments#index'
+        post '/comments', to: 'comments#create'
+      end
+
+      router.resources :posts do
+        concerns :commentable
+      end
+
+      routes = router.route_set.routes
+      # Look for paths that match the pattern, with more flexible matching
+      expect(routes.any? { |r| r.path.include?('/posts/') && r.path.include?('/comments') && r.methods.include?('GET') }).to be true
+      expect(routes.any? { |r| r.path.include?('/posts/') && r.path.include?('/comments') && r.methods.include?('POST') }).to be true
+    end
+
+    it 'raises error for undefined concerns' do
+      expect {
+        router.concerns :nonexistent
+      }.to raise_error(RuntimeError, /Concern.*not found/)
+    end
   end
 
   describe '#mount' do
@@ -355,6 +502,73 @@ RSpec.describe RubyRoutes::Router do
         expect(current_scope_inside_block[:path]).to eq('/admin')
         expect(current_scope_inside_block[:module]).to eq(:admin)
       end
+    end
+  end
+
+  describe "#join_path_parts" do
+    let(:route) { RubyRoutes::Route.new('/test', to: 'test#index') }
+
+    it "joins array elements with slashes" do
+      result = route.send(:join_path_parts, ['users', '123', 'posts'])
+      expect(result).to eq('/users/123/posts')
+    end
+
+    it "handles empty array" do
+      result = route.send(:join_path_parts, [])
+      expect(result).to eq('/')
+    end
+
+    it "handles array with single element" do
+      result = route.send(:join_path_parts, ['users'])
+      expect(result).to eq('/users')
+    end
+
+    it "handles elements with special characters" do
+      result = route.send(:join_path_parts, ['user files', 'report.pdf'])
+      expect(result).to eq('/user files/report.pdf')
+    end
+  end
+
+  describe "validation caching" do
+    let(:route) { RubyRoutes::Route.new('/users/:id', to: 'users#show') }
+
+    it "caches validation results for frozen params" do
+      # Create a frozen params hash
+      params = {id: '123'}.freeze
+      result = double('validation_result')
+
+      # Check that result is not cached initially
+      initial_cached_result = route.send(:get_cached_validation, params)
+      expect(initial_cached_result).to be_nil
+
+      # Cache a result
+      route.send(:cache_validation_result, params, result)
+
+      # Verify it was cached
+      cached_result = route.send(:get_cached_validation, params)
+      expect(cached_result).to eq(result)
+    end
+
+    it "doesn't cache validation results for non-frozen params" do
+      # Create a non-frozen params hash
+      params = {id: '123'}
+      result = double('validation_result')
+
+      # Cache a result
+      route.send(:cache_validation_result, params, result)
+
+      # Verify it wasn't cached
+      cached_result = route.send(:get_cached_validation, params)
+      expect(cached_result).to be_nil
+    end
+
+    it "returns nil for get_cached_validation when validation cache is nil" do
+      # Force nil validation cache
+      route.instance_variable_set(:@validation_cache, nil)
+
+      params = {id: '123'}.freeze
+      result = route.send(:get_cached_validation, params)
+      expect(result).to be_nil
     end
   end
 end

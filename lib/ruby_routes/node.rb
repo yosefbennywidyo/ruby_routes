@@ -1,65 +1,64 @@
 require_relative 'segment'
 
 module RubyRoutes
+  # Node represents a single node in the radix tree structure.
+  # Each node can have static children (exact matches), one dynamic child (parameter capture),
+  # and one wildcard child (consumes remaining path segments).
   class Node
-    attr_accessor :static_children, :dynamic_child, :wildcard_child,
-                  :handlers, :param_name, :is_endpoint
+    attr_accessor :param_name, :is_endpoint, :dynamic_child, :wildcard_child
+    attr_reader :handlers, :static_children
 
     def initialize
+      @is_endpoint = false
+      @handlers = {}
       @static_children = {}
       @dynamic_child = nil
       @wildcard_child = nil
-      @handlers = {}
       @param_name = nil
-      @is_endpoint = false
     end
 
-    # Fast traversal: minimal allocations, streamlined branching
-    # Returns [next_node_or_nil, should_break_bool] or [nil, false] if no match.
-    def traverse_for(segment, index, segments, params)
-      # Static match: O(1) hash lookup
-      child = @static_children[segment]
-      return [child, false] if child
-
-      # Dynamic match: single segment capture
-      if (dyn = @dynamic_child)
-        params[dyn.param_name] = segment if params
-        return [dyn, false]
-      end
-
-      # Wildcard match: consume remainder (last resort)
-      if (wild = @wildcard_child)
-        if params
-          # Build remainder path without intermediate array allocation
-          remainder = segments[index..-1]
-          params[wild.param_name] = remainder.size == 1 ? remainder[0] : remainder.join('/')
-        end
-        return [wild, true]
-      end
-
-      # No match
-      [nil, false]
-    end
-
-    # Pre-cache param names as strings to avoid repeated .to_s calls
-    def param_name
-      @param_name_str ||= @param_name&.to_s
-    end
-
-    def param_name=(name)
-      @param_name = name
-      @param_name_str = nil  # invalidate cache
-    end
-
-    # Normalize method once and cache string keys
     def add_handler(method, handler)
-      method_key = method.to_s.upcase
-      @handlers[method_key] = handler
+      method_str = normalize_method(method)
+      @handlers[method_str] = handler
       @is_endpoint = true
     end
 
     def get_handler(method)
-      @handlers[method]  # assume already normalized upstream
+      @handlers[method]
+    end
+
+    # Fast traversal method with minimal allocations and streamlined branching.
+    # Matching order: static (most specific) → dynamic → wildcard (least specific)
+    # Returns [next_node_or_nil, should_break_bool] where should_break indicates
+    # wildcard capture that consumes remaining path segments.
+    def traverse_for(segment, index, segments, params)
+      # Try static child first (most specific) - O(1) hash lookup
+      if @static_children.key?(segment)
+        return [@static_children[segment], false]
+      # Try dynamic child (parameter capture) - less specific than static
+      elsif @dynamic_child
+        # Capture parameter if params hash provided and param_name is set
+        params[@dynamic_child.param_name] = segment if params && @dynamic_child.param_name
+        return [@dynamic_child, false]
+      # Try wildcard child (consumes remaining segments) - least specific
+      elsif @wildcard_child
+        # Capture remaining path segments for wildcard parameter
+        if params && @wildcard_child.param_name
+          remaining = segments[index..-1]
+          params[@wildcard_child.param_name] = remaining.join('/')
+        end
+        return [@wildcard_child, true] # true signals to stop traversal
+      end
+
+      # No match found at this node
+      [nil, false]
+    end
+
+    private
+
+    # Fast method normalization - converts method to uppercase string
+    def normalize_method(method)
+      method.to_s.upcase
     end
   end
 end
