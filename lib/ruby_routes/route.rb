@@ -4,12 +4,18 @@ require 'set'
 require 'rack'
 require_relative 'route/small_lru'
 require_relative 'utility/path_utility'
+require_relative 'utility/key_builder_utility'
 
 module RubyRoutes
   class Route
     include RubyRoutes::Utility::PathUtility
+    include RubyRoutes::Utility::KeyBuilderUtility
 
     attr_reader :path, :methods, :controller, :action, :name, :constraints, :defaults
+
+    EMPTY_ARRAY = [].freeze
+    EMPTY_PAIR  = [EMPTY_ARRAY, EMPTY_ARRAY].freeze
+    EMPTY_STRING = ''.freeze
 
     def initialize(path, options = {})
       @path = normalize_path(path)
@@ -62,34 +68,19 @@ module RubyRoutes
 
     # Optimized path generation with better caching and fewer allocations
     def generate_path(params = {})
-      return ROOT_PATH if @path == ROOT_PATH
-      return @static_path if @static_path && params.empty?
+      return @static_path if @static_path && (params.nil? || params.empty?)
+      params ||= {}
+      missing, nils = validate_required_params(params)
+      raise RouteNotFound, "Missing params: #{missing.join(', ')}" unless missing.empty?
+      raise RouteNotFound, "Missing or nil params: #{nils.join(', ')}" unless nils.empty?
 
-      # Fast path: check if required params are all present
-      missing_params, nil_params = validate_required_params(params)
-
-      # Fail fast with clear error messages
-      unless missing_params.empty?
-        raise RouteNotFound, "Missing params: #{missing_params.join(', ')}"
-      end
-
-      unless nil_params.empty?
-        raise RouteNotFound, "Missing or nil params: #{nil_params.join(', ')}"
-      end
-
-      # Continue with merged params and path generation
       merged = build_merged_params(params)
-
-      # Check cache for this param set
-      instance_cache_key = build_cache_key_fast(merged)
-      if (cached = @gen_cache.get(instance_cache_key))
+      cache_key = cache_key_for_params(@required_params, merged)
+      if (cached = @gen_cache.get(cache_key))
         return cached
       end
-
-      # Generate path and cache
       path_str = generate_path_string(merged)
-      @gen_cache.set(instance_cache_key, path_str)
-
+      @gen_cache.set(cache_key, path_str)
       path_str
     end
 
@@ -194,7 +185,7 @@ module RubyRoutes
       # Validate constraints efficiently
       validate_constraints_fast!(result) unless @constraints.empty?
 
-      result.dup
+      result
     end
 
     def get_thread_local_hash
@@ -257,40 +248,22 @@ module RubyRoutes
 
     # Optimized merged params building
     def build_merged_params(params)
-      return @defaults if params.empty?
-
-      merged = get_thread_local_merged_hash
-
-      # Merge defaults first if they exist
-      merged.update(@defaults) unless @defaults.empty?
-
-      # Use merge! with transform_keys for better performance
-      if params.respond_to?(:transform_keys)
-        merged.merge!(params.transform_keys(&:to_s))
-      else
-        # Fallback for older Ruby versions
-        params.each { |k, v| merged[k.to_s] = v }
+      return @defaults if params.nil? || params.empty?
+      h = Thread.current[:ruby_routes_merge_hash] ||= {}
+      h.clear
+      @defaults.each { |k,v| h[k] = v }
+      params.each do |k,v|
+        next if v.nil?
+        ks = k.is_a?(String) ? k : k.to_s
+        h[ks] = v
       end
-
-      merged
+      h
     end
 
     def get_thread_local_merged_hash
       hash = Thread.current[:ruby_routes_merged] ||= {}
       hash.clear
       hash
-    end
-
-    # Fast cache key building with minimal allocations
-    def build_cache_key_fast(merged)
-      return '' if @required_params.empty?
-
-      # Use array join which is faster than string concatenation
-      parts = @required_params.map do |name|
-        value = merged[name]
-        value.is_a?(Array) ? value.join('/') : value.to_s
-      end
-      parts.join('|')
     end
 
     # Optimized path generation
@@ -384,50 +357,21 @@ module RubyRoutes
       to.to_s.split('#', 2).last
     end
 
-    # Specialized method for parameter validation with type-based optimizations
+
     def validate_required_params(params)
-      # Skip validation for empty requirements
-      return [[], []] if @required_params.empty?
-
-      # Pre-allocate fixed-size arrays
-      missing_params = []
-      nil_params = []
-      param_type = params_type(params)
-
-      # Single loop with minimal method calls
-      @required_params.each do |param|
-        found = false
-        is_nil = true
-        param_s = param.to_s
-        param_sym = param.to_sym
-
-        case param_type
-        when :hash, :string_keyed_hash, :symbol_keyed_hash
-          # Direct hash access for most common case
-          if params.key?(param_sym)
-            found = true
-            is_nil = params[param_sym].nil?
-          elsif params.key?(param_s)
-            found = true
-            is_nil = params[param_s].nil?
-          end
-        when :enumerable, :method_missing
-          # Fall back to previous robust implementation for edge cases
-          params.each do |k, v|
-            key_match = (k.to_s == param_s || (k.respond_to?(:to_sym) && k.to_sym == param_sym))
-            if key_match
-              found = true
-              is_nil = v.nil?
-              break
-            end
-          end
+      return EMPTY_PAIR if @required_params.empty?
+      missing = nil
+      nils    = nil
+      @required_params.each do |rk|
+        if params.key?(rk)
+          (nils ||= []) << rk if params[rk].nil?
+        elsif params.key?(sym = rk.to_sym)
+          (nils ||= []) << rk if params[sym].nil?
+        else
+          (missing ||= []) << rk
         end
-
-        missing_params << param unless found
-        nil_params << param if found && is_nil
       end
-
-      [missing_params, nil_params]
+      [missing || EMPTY_ARRAY, nils || EMPTY_ARRAY]
     end
 
     # Add this validation cache management
@@ -604,9 +548,5 @@ module RubyRoutes
       raise InvalidRoute, "Action is required" if @action.nil?
       raise InvalidRoute, "Invalid HTTP method: #{@methods}" if @methods.empty?
     end
-
-    # Additional constants
-    EMPTY_ARRAY = [].freeze
-    EMPTY_STRING = ''.freeze
   end
  end
