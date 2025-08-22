@@ -676,4 +676,114 @@ RSpec.describe RubyRoutes::Route do
     # Invalid integer
     expect { route.send(:validate_constraints_fast!, {"id" => "abc"}) }.to raise_error(RubyRoutes::ConstraintViolation)
   end
+
+  describe "Private method test coverage" do
+    describe "#join_path_parts" do
+      let(:route) { RubyRoutes::Route.new('/test', to: 'test#index') }
+
+      it "joins array elements with slashes" do
+        result = route.send(:join_path_parts, ['users', '123', 'posts'])
+        expect(result).to eq('/users/123/posts')
+      end
+
+      it "handles empty array" do
+        result = route.send(:join_path_parts, [])
+        expect(result).to eq('/')
+      end
+
+      it "handles array with single element" do
+        result = route.send(:join_path_parts, ['users'])
+        expect(result).to eq('/users')
+      end
+
+      it "handles elements with special characters" do
+        result = route.send(:join_path_parts, ['user files', 'report.pdf'])
+        expect(result).to eq('/user files/report.pdf')
+      end
+    end
+
+    describe "#validate_required_params" do
+      it "returns empty arrays for empty required params" do
+        route = RubyRoutes::Route.new('/about', to: 'pages#about')
+        # Force empty required params for testing
+        route.instance_variable_set(:@required_params, [])
+
+        missing, nil_params = route.send(:validate_required_params, {id: '123'})
+        expect(missing).to eq([])
+        expect(nil_params).to eq([])
+      end
+
+      it "correctly identifies missing params" do
+        route = RubyRoutes::Route.new('/users/:id', to: 'users#show')
+        # @required_params should contain 'id'
+
+        missing, nil_params = route.send(:validate_required_params, {name: 'John'})
+        expect(missing).to include('id')
+        expect(nil_params).to be_empty
+      end
+
+      it "correctly identifies nil params" do
+        route = RubyRoutes::Route.new('/users/:id', to: 'users#show')
+
+        missing, nil_params = route.send(:validate_required_params, {id: nil})
+        expect(missing).to be_empty
+        expect(nil_params).to include('id')
+      end
+
+      it "handles params with mixed string and symbol keys" do
+        route = RubyRoutes::Route.new('/users/:id/posts/:post_id', to: 'posts#show')
+
+        # Mix of string and symbol keys
+        missing, nil_params = route.send(:validate_required_params, {'id' => '123', post_id: '456'})
+        expect(missing).to be_empty
+        expect(nil_params).to be_empty
+      end
+    end
+
+    describe "validation caching" do
+      let(:route) { RubyRoutes::Route.new('/users/:id', to: 'users#show') }
+
+      it "caches validation results for frozen params" do
+        # Create a frozen params hash
+        params = {id: '123'}.freeze
+        result = double('validation_result')
+
+        # Access private validation cache
+        validation_cache = route.instance_variable_get(:@validation_cache)
+        expect(validation_cache).not_to be_nil
+
+        # Cache should be empty initially
+        expect(validation_cache.instance_variable_get(:@h)).to be_empty
+
+        # Cache a result
+        route.send(:cache_validation_result, params, result)
+
+        # Verify it was cached
+        cached_result = route.send(:get_cached_validation, params)
+        expect(cached_result).to eq(result)
+      end
+
+      it "doesn't cache validation results for non-frozen params" do
+        # Create a non-frozen params hash
+        params = {id: '123'}
+        result = double('validation_result')
+
+        # Cache a result
+        route.send(:cache_validation_result, params, result)
+
+        # Verify it wasn't cached
+        cached_result = route.send(:get_cached_validation, params)
+        expect(cached_result).to be_nil
+      end
+
+      it "returns nil for get_cached_validation when validation cache is nil" do
+        # Force nil validation cache
+        route.instance_variable_set(:@validation_cache, nil)
+
+        params = {id: '123'}.freeze
+        result = route.send(:get_cached_validation, params)
+        expect(result).to be_nil
+      end
+    end
+  end
 end
