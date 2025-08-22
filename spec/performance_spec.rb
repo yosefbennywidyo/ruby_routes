@@ -7,12 +7,12 @@ RSpec.describe 'Performance Optimizations' do
       resources :users  # This creates named routes like :user, :users, :edit_user, etc.
       resources :posts
       resources :comments
-      
+
       namespace :admin do
         resources :users
         resources :posts
       end
-      
+
       get '/products/:id', to: 'products#show', constraints: { id: :int }
       get '/users/:email', to: 'users#show_by_email', constraints: { email: :email }
     end
@@ -63,7 +63,7 @@ RSpec.describe 'Performance Optimizations' do
 
       stats = router.route_set.cache_stats
       hit_rate = stats[:hit_rate].to_f
-      
+
       # Should have high cache hit rate
       expect(hit_rate).to be > 80.0
     end
@@ -73,7 +73,7 @@ RSpec.describe 'Performance Optimizations' do
     it 'handles high-frequency path generation efficiently' do
       # Use the actual named routes created by resources
       available_routes = router.route_set.instance_variable_get(:@named_routes).keys
-      
+
       time = Benchmark.realtime do
         1000.times do
           if available_routes.include?(:user)
@@ -119,18 +119,18 @@ RSpec.describe 'Performance Optimizations' do
   describe 'String Interning' do
     it 'reuses interned HTTP method strings' do
       route = RubyRoutes::RadixTree.new('/test', to: 'test#index', via: :get)
-      
+
       # Should use the same object for GET method
       expect(route.methods.first).to equal(RubyRoutes::Route::HTTP_GET)
     end
 
     it 'freezes static segment values for memory efficiency' do
       route = RubyRoutes::RadixTree.new('/users/profile', to: 'users#profile')
-      
+
       # Static segment values should be frozen
       users_segment = route.instance_variable_get(:@compiled_segments).find { |s| s[:value] == 'users' }
       profile_segment = route.instance_variable_get(:@compiled_segments).find { |s| s[:value] == 'profile' }
-      
+
       expect(users_segment[:value]).to be_frozen
       expect(profile_segment[:value]).to be_frozen
     end
@@ -142,7 +142,7 @@ RSpec.describe 'Performance Optimizations' do
 
       time = Benchmark.realtime do
         1000.times do
-          route_set.send(:build_cache_key, 'GET', '/users/123')
+          route_set.send(:cache_key_for_request, 'GET', '/users/123')
         end
       end
 
