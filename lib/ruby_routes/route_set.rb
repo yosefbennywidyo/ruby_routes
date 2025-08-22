@@ -1,94 +1,103 @@
+require_relative 'utility/key_builder_utility'
+
 module RubyRoutes
   class RouteSet
     attr_reader :routes
 
+    include RubyRoutes::Utility::KeyBuilderUtility
+
     def initialize
-      @tree = RubyRoutes::RadixTree.new
-      @named_routes = {}
       @routes = []
-      # Optimized recognition cache with better data structures
+      @named_routes = {}
       @recognition_cache = {}
+      @recognition_cache_max = 2048
       @cache_hits = 0
       @cache_misses = 0
-      @recognition_cache_max = 8192  # larger for better hit rates
+      @radix_tree = RadixTree.new
     end
 
-    def add_route(route)
+    def add_to_collection(route)
       @routes << route
-      @tree.add(route.path, route.methods, route)
+      @radix_tree.add(route.path, route.methods, route)
       @named_routes[route.name] = route if route.named?
-      # Clear recognition cache when routes change
-      @recognition_cache.clear if @recognition_cache.size > 100
-      route
     end
 
-    def find_route(request_method, request_path)
-      # Optimized: avoid repeated string allocation
-      method_up = request_method.to_s.upcase
-      handler, _params = @tree.find(request_path, method_up)
-      handler
+    alias_method :add_route, :add_to_collection
+
+    def find_route(method, path)
+      route, _ = @radix_tree.find(path, method)
+      route
     end
 
     def find_named_route(name)
       route = @named_routes[name]
-      return route if route
-      raise RouteNotFound, "No route named '#{name}'"
+      raise RouteNotFound.new("No route named '#{name}'") unless route
+      route
     end
 
-    def match(request_method, request_path)
-      # Fast path: normalize method once
-      method_up = method_lookup(request_method)
+    FAST_METHOD_MAP = {
+      get: 'GET', post: 'POST', put: 'PUT', patch: 'PATCH',
+      delete: 'DELETE', head: 'HEAD', options: 'OPTIONS'
+    }.freeze
 
-      # Optimized cache key: avoid string interpolation when possible
-      cache_key = build_cache_key(method_up, request_path)
+    def normalize_method_input(method)
+      case method
+      when Symbol
+        FAST_METHOD_MAP[method] || method.to_s.upcase
+      when String
+        # Fast path: assume already correct; fallback only for common lowercase
+        return method if method.length <= 6 && method == method.upcase
+        FAST_METHOD_MAP[method.downcase.to_sym] || method.upcase
+      else
+        s = method.to_s
+        FAST_METHOD_MAP[s.downcase.to_sym] || s.upcase
+      end
+    end
+    private :normalize_method_input
 
-      # Cache hit: return immediately (cached result includes full structure)
-      if (cached_result = @recognition_cache[cache_key])
+    def match(method, path)
+      m = normalize_method_input(method)
+      raw = path.to_s
+      cache_key = cache_key_for_request(m, raw)
+
+      # Single cache lookup with proper hit accounting
+      if (hit = @recognition_cache[cache_key])
         @cache_hits += 1
-        return cached_result
+        return hit
       end
 
       @cache_misses += 1
 
-      # Use thread-local params to avoid allocations
-      params = get_thread_local_params
-      handler, _ = @tree.find(request_path, method_up, params)
-      return nil unless handler
+      path_without_query, _qs = raw.split('?', 2)
 
-      route = handler
+      # Use normalized method (m) for trie lookup
+      route, params = @radix_tree.find(path_without_query, m)
+      return nil unless route
 
-      # Fast path: merge defaults only if they exist
-      merge_defaults(route, params) if route.defaults && !route.defaults.empty?
+      merge_query_params(route, raw, params)
 
-      # Fast path: parse query params only if needed
-      if request_path.include?('?')
-        merge_query_params(route, request_path, params)
+      if route.respond_to?(:defaults) && route.defaults
+        route.defaults.each { |k,v| params[k.to_s] = v unless params.key?(k.to_s) }
       end
 
-      # Create return hash and cache the complete result
-      result_params = params.dup
       result = {
         route: route,
-        params: result_params,
+        params: params,
         controller: route.controller,
         action: route.action
-      }.freeze
+      }
 
       insert_cache_entry(cache_key, result)
       result
     end
 
-    def recognize_path(path, method = :get)
+    def recognize_path(path, method = 'GET')
       match(method, path)
     end
 
     def generate_path(name, params = {})
-      route = @named_routes[name]
-      if route
-        route.generate_path(params)
-      else
-        raise RouteNotFound, "No route named '#{name}'"
-      end
+      route = find_named_route(name)
+      route.generate_path(params)
     end
 
     def generate_path_from_route(route, params = {})
@@ -99,21 +108,31 @@ module RubyRoutes
       @routes.clear
       @named_routes.clear
       @recognition_cache.clear
-      @tree = RadixTree.new
-      @cache_hits = @cache_misses = 0
+      @cache_hits = 0
+      @cache_misses = 0
+      # Create a new radix tree since we can't clear it
+      @radix_tree = RadixTree.new
     end
 
     def size
       @routes.size
     end
-    alias_method :length, :size
 
     def empty?
       @routes.empty?
     end
 
+    def cache_stats
+      lookups = @cache_hits + @cache_misses
+      {
+        hits: @cache_hits,
+        misses: @cache_misses,
+        hit_rate: lookups.zero? ? 0.0 : (@cache_hits.to_f / lookups * 100.0),
+        size: @recognition_cache.size
+      }
+    end
+
     def each(&block)
-      return enum_for(:each) unless block_given?
       @routes.each(&block)
     end
 
@@ -121,72 +140,44 @@ module RubyRoutes
       @routes.include?(route)
     end
 
-    # Performance monitoring
-    def cache_stats
-      total = @cache_hits + @cache_misses
-      hit_rate = total > 0 ? (@cache_hits.to_f / total * 100).round(2) : 0
-      {
-        hits: @cache_hits,
-        misses: @cache_misses,
-        hit_rate: "#{hit_rate}%",
-        size: @recognition_cache.size
-      }
-    end
-
     private
 
-    # Method lookup table to avoid repeated upcasing with interned strings
-    def method_lookup(method)
-      @method_cache ||= Hash.new { |h, k| h[k] = k.to_s.upcase.freeze }
-      @method_cache[method]
+    def insert_cache_entry(key, value)
+      # unchanged cache insert (key already frozen & reusable)
+      if @recognition_cache.size >= @recognition_cache_max
+        @recognition_cache.keys.first(@recognition_cache_max / 4).each { |k| @recognition_cache.delete(k) }
+      end
+      @recognition_cache[key] = value
     end
 
-    # Optimized cache key building - avoid string interpolation
-    def build_cache_key(method, path)
-      # String interpolation creates a new string directly without intermediate allocations
-      "#{method}:#{path}"
+    # Add the missing method for merging query params
+    def merge_query_params(route, path, params)
+      # Check for query string
+      if path.to_s.include?('?')
+        if route.respond_to?(:parse_query_params)
+          query_params = route.parse_query_params(path)
+          params.merge!(query_params) if query_params
+        elsif route.respond_to?(:query_params)
+          query_params = route.query_params(path)
+          params.merge!(query_params) if query_params
+        end
+      end
     end
 
-    # Get thread-local params hash, reusing when possible
+    # Add thread-local params pool methods
     def get_thread_local_params
-      # Use single thread-local hash that gets cleared, avoiding pool management overhead
-      hash = Thread.current[:ruby_routes_params_hash] ||= {}
-      hash.clear
-      hash
+      thread_params = Thread.current[:ruby_routes_params_pool] ||= []
+      if thread_params.empty?
+        {}
+      else
+        thread_params.pop.clear
+      end
     end
 
     def return_params_to_pool(params)
-      # No-op since we're using a single reusable hash per thread
-    end
-
-    # Fast defaults merging
-    def merge_defaults(route, params)
-      route.defaults.each do |key, value|
-        params[key] = value unless params.key?(key)
-      end
-    end
-
-    # Fast query params merging
-    def merge_query_params(route, request_path, params)
-      if route.respond_to?(:parse_query_params)
-        qp = route.parse_query_params(request_path)
-        params.merge!(qp) unless qp.empty?
-      elsif route.respond_to?(:query_params)
-        qp = route.query_params(request_path)
-        params.merge!(qp) unless qp.empty?
-      end
-    end
-
-    # Efficient cache insertion with LRU eviction
-    def insert_cache_entry(cache_key, cache_entry)
-      @recognition_cache[cache_key] = cache_entry
-
-      # Simple eviction: clear cache when it gets too large
-      if @recognition_cache.size > @recognition_cache_max
-        # Keep most recently used half
-        keys_to_delete = @recognition_cache.keys[0...(@recognition_cache_max / 2)]
-        keys_to_delete.each { |k| @recognition_cache.delete(k) }
-      end
+      params.clear
+      thread_pool = Thread.current[:ruby_routes_params_pool] ||= []
+      thread_pool << params if thread_pool.size < 10 # Limit pool size
     end
   end
 end

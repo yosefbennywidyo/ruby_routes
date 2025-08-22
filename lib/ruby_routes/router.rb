@@ -1,9 +1,12 @@
+require_relative 'utility/route_utility'
+
 module RubyRoutes
   class Router
     attr_reader :route_set
 
     def initialize(&block)
       @route_set = RouteSet.new
+      @route_utils = RubyRoutes::Utility::RouteUtility.new(@route_set)
       @scope_stack = []
       @concerns = {}
       instance_eval(&block) if block_given?
@@ -102,7 +105,14 @@ module RubyRoutes
     end
 
     # Scope support
-    def scope(options = {}, &block)
+    def scope(options_or_path = {}, &block)
+      # Handle the case where the first argument is a string (path)
+      options = if options_or_path.is_a?(String)
+                  { path: options_or_path }
+                else
+                  options_or_path
+                end
+
       @scope_stack.push(options)
 
       if block_given?
@@ -165,14 +175,9 @@ module RubyRoutes
 
     private
 
-    def add_route(path, options = {})
-      # Apply current scope
-      scoped_options = apply_scope(path, options)
-
-      # Create and add the route
-      route = Route.new(scoped_options[:path], scoped_options)
-      @route_set.add_route(route)
-      route
+    def add_route(path, options={})
+      scoped = apply_scope(path, options)
+      @route_utils.define(scoped[:path], scoped)
     end
 
     def apply_scope(path, options)
