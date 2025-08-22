@@ -60,36 +60,33 @@ module RubyRoutes
     # Optimized path generation with better caching and fewer allocations
     def generate_path(params = {})
       return ROOT_PATH if @path == ROOT_PATH
+      return @static_path if @static_path && params.empty?
 
-      # Fast path: empty params and no required params
-      if params.empty? && @required_params.empty?
-        return @static_path if @static_path
+      # Fast path: check if required params are all present
+      missing_params, nil_params = validate_required_params(params)
+
+      # Fail fast with clear error messages
+      unless missing_params.empty?
+        raise RouteNotFound, "Missing params: #{missing_params.join(', ')}"
       end
 
-      # Build merged params efficiently
+      unless nil_params.empty?
+        raise RouteNotFound, "Missing or nil params: #{nil_params.join(', ')}"
+      end
+
+      # Continue with merged params and path generation
       merged = build_merged_params(params)
 
-      # Check required params (fast Set operation)
-      missing_params = @required_params_set - merged.keys
-      unless missing_params.empty?
-        raise RubyRoutes::RouteNotFound, "Missing params: #{missing_params.to_a.join(', ')}"
-      end
-
-      # Check for nil values in required params
-      nil_params = @required_params_set.select { |param| merged[param].nil? }
-      unless nil_params.empty?
-        raise RubyRoutes::RouteNotFound, "Missing or nil params: #{nil_params.to_a.join(', ')}"
-      end
-
-      # Cache lookup
-      cache_key = build_cache_key_fast(merged)
-      if (cached = @gen_cache.get(cache_key))
+      # Check cache for this param set
+      instance_cache_key = build_cache_key_fast(merged)
+      if (cached = @gen_cache.get(instance_cache_key))
         return cached
       end
 
-      # Generate path using string buffer (avoid array allocations)
+      # Generate path and cache
       path_str = generate_path_string(merged)
-      @gen_cache.set(cache_key, path_str)
+      @gen_cache.set(instance_cache_key, path_str)
+
       path_str
     end
 
@@ -134,6 +131,7 @@ module RubyRoutes
       @is_resource = @path.match?(/\/:id(?:$|\.)/)
       @gen_cache = SmallLru.new(512)  # larger cache
       @query_cache = SmallLru.new(QUERY_CACHE_SIZE)
+      initialize_validation_cache
 
       compile_segments
       compile_required_params
@@ -304,25 +302,57 @@ module RubyRoutes
     def generate_path_string(merged)
       return ROOT_PATH if @compiled_segments.empty?
 
-      # Pre-allocate array for parts to avoid string buffer operations
-      parts = []
-
+      # Estimate final path length to avoid resizing
+      estimated_size = 1 # For leading slash
       @compiled_segments.each do |seg|
         case seg[:type]
         when :static
-          parts << seg[:value]
-        when :param
-          value = merged.fetch(seg[:name]).to_s
-          parts << encode_segment_fast(value)
-        when :splat
-          value = merged.fetch(seg[:name], '')
-          parts << format_splat_value(value)
+          estimated_size += seg[:value].length + 1 # +1 for slash
+        when :param, :splat
+          estimated_size += 20 # Average param length estimate
         end
       end
 
-      # Single join operation is faster than multiple string concatenations
-      path = "/#{parts.join('/')}"
-      path == '/' ? ROOT_PATH : path
+      # Use string buffer with pre-allocated capacity
+      path = String.new(capacity: estimated_size)
+      path << '/'
+
+      # Generate path directly into buffer
+      last_idx = @compiled_segments.size - 1
+      @compiled_segments.each_with_index do |seg, i|
+        case seg[:type]
+        when :static
+          path << seg[:value]
+        when :param
+          value = merged.fetch(seg[:name]).to_s
+          path << encode_segment_fast(value)
+        when :splat
+          value = merged.fetch(seg[:name], '')
+          path << format_splat_value(value)
+        end
+
+        path << '/' unless i == last_idx
+      end
+
+      path
+    end
+
+    def join_path_parts(parts)
+      # Pre-calculate the size to avoid buffer resizing
+      size = parts.sum { |p| p.length + 1 } # +1 for slash
+
+      # Use string buffer for better performance
+      result = String.new(capacity: size)
+      result << '/'
+
+      # Join with explicit concatenation rather than array join
+      last_idx = parts.size - 1
+      parts.each_with_index do |part, i|
+        result << part
+        result << '/' unless i == last_idx
+      end
+
+      result
     end
 
     def format_splat_value(value)
@@ -382,6 +412,113 @@ module RubyRoutes
     def extract_action(to)
       return nil unless to
       to.to_s.split('#', 2).last
+    end
+
+    # Specialized method for parameter validation with type-based optimizations
+    def validate_required_params(params)
+      # Skip validation for empty requirements
+      return [[], []] if @required_params.empty?
+
+      # Pre-allocate fixed-size arrays
+      missing_params = []
+      nil_params = []
+      param_type = params_type(params)
+
+      # Single loop with minimal method calls
+      @required_params.each do |param|
+        found = false
+        is_nil = true
+        param_s = param.to_s
+        param_sym = param.to_sym
+
+        case param_type
+        when :hash, :string_keyed_hash, :symbol_keyed_hash
+          # Direct hash access for most common case
+          if params.key?(param_sym)
+            found = true
+            is_nil = params[param_sym].nil?
+          elsif params.key?(param_s)
+            found = true
+            is_nil = params[param_s].nil?
+          end
+        when :enumerable, :method_missing
+          # Fall back to previous robust implementation for edge cases
+          params.each do |k, v|
+            key_match = (k.to_s == param_s || (k.respond_to?(:to_sym) && k.to_sym == param_sym))
+            if key_match
+              found = true
+              is_nil = v.nil?
+              break
+            end
+          end
+        end
+
+        missing_params << param unless found
+        nil_params << param if found && is_nil
+      end
+
+      [missing_params, nil_params]
+    end
+
+    # Add this validation cache management
+    def initialize_validation_cache
+      @validation_cache = SmallLru.new(64)
+    end
+
+    def cache_validation_result(params, result)
+      # Only cache immutable params to prevent subtle bugs
+      if params.frozen? && @validation_cache && @validation_cache.size < 64
+        @validation_cache.set(params.hash, result)
+      end
+    end
+
+    def get_cached_validation(params)
+      return nil unless @validation_cache
+      @validation_cache.get(params.hash)
+    end
+
+    # Fast parameter type detection with result caching
+    def params_type(params)
+      # Cache parameter type detection results
+      @params_type_cache ||= {}
+      param_obj_id = params.object_id
+
+      # Return cached type if available
+      return @params_type_cache[param_obj_id] if @params_type_cache.key?(param_obj_id)
+
+      # Type detection with explicit checks
+      type = if params.is_a?(Hash)
+        # Further refine hash type for optimization
+        refine_hash_type(params)
+      elsif params.respond_to?(:each) && params.respond_to?(:[])
+        # Hash-like enumerable
+        :enumerable
+      else
+        # Last resort - may
+        :mehod_missing
+      end
+
+      # Keep cache small
+      if @params_type_cache.size > 100
+        @params_type_cache.clear
+      end
+
+      # Cache result
+      @params_type_cache[param_obj_id] = type
+    end
+
+    # Further refine hash type for potential optimization
+    def refine_hash_type(params)
+      # Only sample a few keys to determine type tendency
+      key_samples = params.keys.take(3)
+
+      if key_samples.all? { |k| k.is_a?(String) }
+        :string_keyed_hash
+      elsif key_samples.all? { |k| k.is_a?(Symbol) }
+        :symbol_keyed_hash
+      else
+        :hash # Mixed keys
+      end
     end
 
     # Optimized constraint validation
