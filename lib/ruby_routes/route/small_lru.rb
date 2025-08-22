@@ -31,6 +31,10 @@ module RubyRoutes
         val
       end
 
+      def size
+        @h.size
+      end
+
       def increment_hits
         @hits += 1
       end
