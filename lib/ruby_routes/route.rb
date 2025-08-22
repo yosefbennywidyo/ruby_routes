@@ -3,23 +3,26 @@ require 'timeout'
 require 'set'
 require 'rack'
 require_relative 'route/small_lru'
+require_relative 'utility/path_utility'
 
 module RubyRoutes
   class Route
+    include RubyRoutes::Utility::PathUtility
+
     attr_reader :path, :methods, :controller, :action, :name, :constraints, :defaults
 
     def initialize(path, options = {})
       @path = normalize_path(path)
       # Pre-normalize and freeze methods at creation time
-      raw_methods = Array(options[:via] || :get)
-      @methods = raw_methods.map { |m| normalize_method(m) }.freeze
-      @methods_set = @methods.to_set.freeze
-      @controller = extract_controller(options)
-      @action = options[:action] || extract_action(options[:to])
-      @name = options[:as]
-      @constraints = options[:constraints] || {}
+      raw_methods   = Array(options[:via] || :get)
+      @methods      = raw_methods.map { |m| normalize_method(m) }.freeze
+      @methods_set  = @methods.to_set.freeze
+      @controller   = extract_controller(options)
+      @action       = options[:action] || extract_action(options[:to])
+      @name         = options[:as]
+      @constraints  = options[:constraints] || {}
       # Pre-normalize defaults to string keys and freeze
-      @defaults = (options[:defaults] || {}).transform_keys(&:to_s).freeze
+      @defaults     = (options[:defaults] || {}).transform_keys(&:to_s).freeze
 
       # Pre-compile everything at initialization
       precompile_route_data
@@ -220,7 +223,7 @@ module RubyRoutes
       return EMPTY_HASH if @compiled_segments.empty? && request_path == ROOT_PATH
       return nil if @compiled_segments.empty?
 
-      path_parts = split_path_fast(request_path)
+      path_parts = split_path(request_path)
 
       # Check for wildcard/splat segment
       has_splat = @compiled_segments.any? { |seg| seg[:type] == :splat }
@@ -232,14 +235,6 @@ module RubyRoutes
       end
 
       extract_params_from_parts(path_parts)
-    end
-
-    def split_path_fast(request_path)
-      # Remove query string before splitting
-      path = request_path.split('?', 2).first
-      path = path[1..-1] if path.start_with?('/')
-      path = path[0...-1] if path.end_with?('/') && path != ROOT_PATH
-      path.empty? ? [] : path.split('/')
     end
 
     def extract_params_from_parts(path_parts)
@@ -337,24 +332,6 @@ module RubyRoutes
       path
     end
 
-    def join_path_parts(parts)
-      # Pre-calculate the size to avoid buffer resizing
-      size = parts.sum { |p| p.length + 1 } # +1 for slash
-
-      # Use string buffer for better performance
-      result = String.new(capacity: size)
-      result << '/'
-
-      # Join with explicit concatenation rather than array join
-      last_idx = parts.size - 1
-      parts.each_with_index do |part, i|
-        result << part
-        result << '/' unless i == last_idx
-      end
-
-      result
-    end
-
     def format_splat_value(value)
       case value
       when Array
@@ -394,13 +371,6 @@ module RubyRoutes
       result = Rack::Utils.parse_query(query_string)
       @query_cache.set(query_string, result)
       result
-    end
-
-    def normalize_path(path)
-      path_str = path.to_s
-      path_str = "/#{path_str}" unless path_str.start_with?('/')
-      path_str = path_str.chomp('/') unless path_str == ROOT_PATH
-      path_str
     end
 
     def extract_controller(options)

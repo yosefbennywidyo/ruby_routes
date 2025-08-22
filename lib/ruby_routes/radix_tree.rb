@@ -1,7 +1,10 @@
 require_relative 'segment'
+require_relative 'utility/path_utility'
 
 module RubyRoutes
   class RadixTree
+    include RubyRoutes::Utility::PathUtility
+
     class << self
       # Allow RadixTree.new(path, options...) to act as a convenience factory
       def new(*args, &block)
@@ -36,7 +39,7 @@ module RubyRoutes
       # Skip empty paths
       return handler if path_str.nil? || path_str.empty?
 
-      path_parts = split_path_raw(path_str)
+      path_parts = split_path(path_str)
       current_node = @root
 
       # Add path segments to tree
@@ -141,20 +144,6 @@ module RubyRoutes
 
     private
 
-    def normalize_path(path)
-      path = path.to_s
-      # Add leading slash if missing
-      path = '/' + path unless path.start_with?('/')
-      # Remove trailing slash if present (unless root)
-      path = path[0..-2] if path.length > 1 && path.end_with?('/')
-      path
-    end
-
-    def split_path_raw(path)
-      return @empty_segments if path == '/'
-      path.split('/').reject(&:empty?)
-    end
-
     def split_path_cached(path)
       return @empty_segments if path == '/'
 
@@ -164,7 +153,7 @@ module RubyRoutes
       end
 
       # Split path and add to cache
-      segments = split_path_raw(path)
+      segments = split_path(path)
 
       # Manage cache size - evict oldest entries when limit reached
       if @split_cache.size >= @split_cache_max

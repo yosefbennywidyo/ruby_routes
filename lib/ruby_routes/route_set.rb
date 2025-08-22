@@ -12,17 +12,13 @@ module RubyRoutes
       @radix_tree = RadixTree.new
     end
 
-    def add_route(route)
+    def add_to_collection(route)
       @routes << route
       @radix_tree.add(route.path, route.methods, route)
-
-      # Register named route if it has a name
-      if route.named?
-        @named_routes[route.name] = route
-      end
-
-      route
+      @named_routes[route.name] = route if route.named?
     end
+
+    alias_method :add_route, :add_to_collection
 
     def find_route(method, path)
       route, _ = @radix_tree.find(path, method)
