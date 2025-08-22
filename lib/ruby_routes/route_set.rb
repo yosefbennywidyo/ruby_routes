@@ -1,6 +1,10 @@
+require_relative 'utility/key_builder_utility'
+
 module RubyRoutes
   class RouteSet
     attr_reader :routes
+
+    include RubyRoutes::Utility::KeyBuilderUtility
 
     def initialize
       @routes = []
@@ -31,35 +35,51 @@ module RubyRoutes
       route
     end
 
-    def match(method, path)
-      cache_key = build_cache_key(method, path)
+    FAST_METHOD_MAP = {
+      get: 'GET', post: 'POST', put: 'PUT', patch: 'PATCH',
+      delete: 'DELETE', head: 'HEAD', options: 'OPTIONS'
+    }.freeze
 
-      # Check cache first
-      if @recognition_cache.key?(cache_key)
+    def normalize_method_input(method)
+      case method
+      when Symbol
+        FAST_METHOD_MAP[method] || method.to_s.upcase
+      when String
+        # Fast path: assume already correct; fallback only for common lowercase
+        return method if method.length <= 6 && method == method.upcase
+        FAST_METHOD_MAP[method.downcase.to_sym] || method.upcase
+      else
+        s = method.to_s
+        FAST_METHOD_MAP[s.downcase.to_sym] || s.upcase
+      end
+    end
+    private :normalize_method_input
+
+    def match(method, path)
+      m = normalize_method_input(method)
+      raw = path.to_s
+      cache_key = cache_key_for_request(m, raw)
+
+      # Single cache lookup with proper hit accounting
+      if (hit = @recognition_cache[cache_key])
         @cache_hits += 1
-        return @recognition_cache[cache_key]
+        return hit
       end
 
       @cache_misses += 1
 
-      # Extract path without query string for lookup
-      path_without_query, query_string = path.to_s.split('?', 2)
+      path_without_query, _qs = raw.split('?', 2)
 
-      # Find the route
-      route, params = @radix_tree.find(path_without_query, method)
+      # Use normalized method (m) for trie lookup
+      route, params = @radix_tree.find(path_without_query, m)
       return nil unless route
 
-      # Extract and merge query parameters
-      merge_query_params(route, path, params)
+      merge_query_params(route, raw, params)
 
-      # Apply defaults from route
       if route.respond_to?(:defaults) && route.defaults
-        route.defaults.each do |key, value|
-          params[key.to_s] = value unless params.key?(key.to_s)
-        end
+        route.defaults.each { |k,v| params[k.to_s] = v unless params.key?(k.to_s) }
       end
 
-      # Build the result hash
       result = {
         route: route,
         params: params,
@@ -67,9 +87,7 @@ module RubyRoutes
         action: route.action
       }
 
-      # Cache the result
       insert_cache_entry(cache_key, result)
-
       result
     end
 
@@ -105,10 +123,11 @@ module RubyRoutes
     end
 
     def cache_stats
+      lookups = @cache_hits + @cache_misses
       {
         hits: @cache_hits,
         misses: @cache_misses,
-        hit_rate: size > 0 ? (@cache_hits.to_f / (@cache_hits + @cache_misses) * 100.0) : 0.0,
+        hit_rate: lookups.zero? ? 0.0 : (@cache_hits.to_f / lookups * 100.0),
         size: @recognition_cache.size
       }
     end
@@ -123,20 +142,11 @@ module RubyRoutes
 
     private
 
-    def build_cache_key(method, path)
-      "#{method}:#{path}"
-    end
-
     def insert_cache_entry(key, value)
-      # Implement LRU-like behavior by evicting oldest entries when too many
+      # unchanged cache insert (key already frozen & reusable)
       if @recognition_cache.size >= @recognition_cache_max
-        # Remove a significant batch of oldest entries - 25% of max size
-        keys_to_remove = @recognition_cache.keys.first(@recognition_cache_max / 4)
-        keys_to_remove.each do |old_key|
-          @recognition_cache.delete(old_key)
-        end
+        @recognition_cache.keys.first(@recognition_cache_max / 4).each { |k| @recognition_cache.delete(k) }
       end
-
       @recognition_cache[key] = value
     end
 
