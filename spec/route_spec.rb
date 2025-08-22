@@ -508,6 +508,23 @@ RSpec.describe RubyRoutes::Route do
         method != :transform_keys
       end
 
+      # Define method_missing to handle calls to key? and []
+      def params.method_missing(method, *args)
+        if method == :key? || method == :has_key?
+          key = args.first
+          key.to_s == 'id' || key.to_sym == :id
+        elsif method == :[]
+          key = args.first
+          if key.to_s == 'id' || key.to_sym == :id
+            '123'
+          else
+            nil
+          end
+        else
+          super
+        end
+      end
+
       def params.each
         yield :id, '123'
       end
