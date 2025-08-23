@@ -357,50 +357,35 @@ def run_version_in_subprocess(label)
   runner = File.join(Dir.tmpdir, "ruby_routes_runner_#{label.downcase}.rb")
   write_runner_script(runner)
 
-  # SECURITY: validate runner path (prevents path tampering / traversal)
-  runner_path = File.expand_path(runner)
-  tmp_root    = File.expand_path(Dir.tmpdir)
+  runner_path = File.realpath(runner)
+  tmp_root    = File.realpath(Dir.tmpdir)
   unless runner_path.start_with?(tmp_root + File::SEPARATOR)
-    raise "Refusing to execute runner outside tmpdir"
+    raise "Runner outside tmpdir"
   end
-
-  # Ensure file permissions are not world-writable
-  st = File.stat(runner_path)
-  if (st.mode & 0o002) != 0
-    raise "Runner script is world-writable; aborting for safety"
-  end
-
-  env = { 'RR_VERSION' => label.to_s.freeze }.freeze
-
-  # Secure process spawn (no shell), separate pipes, minimal env
-  stdout = stderr = nil
-  status = nil
-
-  # Allow only whitelisted env key
-  safe_env = { 'RR_VERSION' => label.to_s }
 
   r_out, w_out = IO.pipe
-  r_err, w_err = IO.pipe
-  pid = Process.spawn(safe_env, RbConfig.ruby, '--disable-gems', runner_path,
-                      out: w_out, err: w_err)
-  w_out.close
-  w_err.close
-  stdout = r_out.read
-  stderr = r_err.read
-  r_out.close
-  r_err.close
-  Process.wait(pid)
-  status = $?
-
-  unless status.success?
-    warn "[#{label}] subprocess failed (exit #{status.exitstatus})"
-    warn stderr unless stderr.empty?
-    return {}
+  pid = fork do
+    begin
+      r_out.close
+      ENV['RR_VERSION'] = label.to_s
+      $stdout.reopen(w_out)
+      $stderr.reopen(w_out)
+      $stdout.sync = true
+      $stderr.sync = true
+      load runner_path
+    rescue => e
+      puts({ error: e.class.name, message: e.message }.to_json)
+    ensure
+      w_out.close
+    end
+    exit! 0
   end
-
+  w_out.close
+  stdout = r_out.read
+  r_out.close
+  Process.wait(pid)
   JSON.parse(stdout, symbolize_names: true)
 rescue JSON::ParserError
-  warn "[#{label}] Non‑JSON output:\n#{stdout.inspect}"
   {}
 end
 
