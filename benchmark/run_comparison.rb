@@ -4,7 +4,6 @@
 # No in‑process constant unloading (safer & truer measurements).
 
 require 'fileutils'
-require 'open3'
 require 'json'
 require 'rbconfig'
 
@@ -44,51 +43,62 @@ class BenchmarkRunner
       File.write(NODE_FILE,  node_src)
     end
 
+    # Remove Open3 usage: use Rugged (if available) else raise (no shell call).
+    begin
+      require 'rugged'
+      RUGGED_AVAILABLE = true
+    rescue LoadError
+      RUGGED_AVAILABLE = false
+    end
+
     def git_show(path)
       unless ALLOWED_FILES.include?(path)
-        raise ArgumentError, "Refusing to git show unapproved path: #{path}"
+        raise ArgumentError, "Unapproved path: #{path}"
       end
       unless MAIN_COMMIT.match?(COMMIT_SHA_REGEX)
         raise ArgumentError, "Invalid MAIN_COMMIT format"
       end
-      cmd = ['git', '-C', ROOT, 'show', "#{MAIN_COMMIT}:#{path}"]
-      # Array form (no shell); no user input in command position -> safe
-      out, err, status = Open3.capture3(*cmd)
-      raise "git show failed: #{err}" unless status.success? && !out.empty?
-      out
+      unless RUGGED_AVAILABLE
+        raise "Rugged not available; cannot read commit without spawning git"
+      end
+      repo = Rugged::Repository.new(ROOT)
+      spec = "#{MAIN_COMMIT}:#{path}"
+      blob = repo.rev_parse(spec)
+      raise "Blob not found: #{spec}" unless blob.is_a?(Rugged::Blob)
+      blob.content
     end
 
-    # Secure alternative to Open3.capture3 using Process.spawn + pipes (no shell),
-    # single combined stdout+stderr stream; avoids command injection by:
-    #  - Validating BENCH_FILE path
-    #  - Using array args (no interpolation)
-    #  - Restricting ENV keys we pass through
-    SAFE_ENV_KEYS = %w[RR_VERSION].freeze
-
+    # Secure subprocess without exec’ing external commands:
+    # Use fork + load (child process), avoiding Open3 / system / spawn.
     def run_subprocess(label)
       raise "Benchmark script missing: #{BENCH_FILE}" unless File.file?(BENCH_FILE)
       bench_path = File.realpath(BENCH_FILE)
       root_path  = File.realpath(ROOT)
       unless bench_path.start_with?(root_path + File::SEPARATOR)
-        raise "Refusing to execute script outside repo root"
+        raise "Refusing to load script outside repo root"
       end
 
-      # Minimal environment (inherit nothing except needed var)
-      env = { 'RR_VERSION' => label.to_s }
-
       r_out, w_out = IO.pipe
-      pid = Process.spawn(env, RbConfig.ruby, '--disable-gems', bench_path,
-                          out: w_out, err: :out)
+      pid = fork do
+        begin
+          r_out.close
+          ENV['RR_VERSION'] = label.to_s
+          $stdout.reopen(w_out)
+          $stderr.reopen(w_out)
+          $stdout.sync = true
+          $stderr.sync = true
+          load bench_path
+        rescue => e
+          puts({ error: e.class.name, message: e.message }.to_json)
+        ensure
+          w_out.close
+        end
+        exit! 0
+      end
       w_out.close
       stdout = r_out.read
       r_out.close
       Process.wait(pid)
-      status = $?
-
-      unless status.success?
-        warn "[#{label}] benchmark failed (exit #{status.exitstatus})"
-      end
-
       parsed = begin
         JSON.parse(stdout, symbolize_names: true)
       rescue JSON::ParserError
