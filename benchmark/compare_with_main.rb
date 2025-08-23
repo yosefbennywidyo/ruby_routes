@@ -24,19 +24,41 @@ class PerformanceComparison
   def self.restore_main_branch_files
     puts "🔄 Restoring main branch files..."
     
-    # Extract original files from git history (before optimizations)
-    success1 = system('cd /home/runner/work/ruby_routes/ruby_routes && git show 2ac1375:lib/ruby_routes/radix_tree.rb > /tmp/performance_comparison/radix_tree_main.rb')
-    success2 = system('cd /home/runner/work/ruby_routes/ruby_routes && git show 2ac1375:lib/ruby_routes/node.rb > /tmp/performance_comparison/node_main.rb')
-    
-    if success1 && success2
-      FileUtils.cp('/tmp/performance_comparison/radix_tree_main.rb', 
-                   '/home/runner/work/ruby_routes/ruby_routes/lib/ruby_routes/radix_tree.rb')
-      FileUtils.cp('/tmp/performance_comparison/node_main.rb', 
-                   '/home/runner/work/ruby_routes/ruby_routes/lib/ruby_routes/node.rb')
+    begin
+      # Extract original files from git history using safer approach
+      repo_path = '/home/runner/work/ruby_routes/ruby_routes'
+      commit_hash = '2ac1375'
+      
+      # Validate paths to prevent directory traversal
+      radix_tree_path = File.join(repo_path, 'lib/ruby_routes/radix_tree.rb')
+      node_path = File.join(repo_path, 'lib/ruby_routes/node.rb')
+      
+      unless File.exist?(File.dirname(radix_tree_path)) && File.exist?(File.dirname(node_path))
+        puts "❌ Invalid file paths"
+        return false
+      end
+      
+      # Use IO.popen for safer command execution
+      radix_content = IO.popen(['git', '-C', repo_path, 'show', "#{commit_hash}:lib/ruby_routes/radix_tree.rb"], &:read)
+      node_content = IO.popen(['git', '-C', repo_path, 'show', "#{commit_hash}:lib/ruby_routes/node.rb"], &:read)
+      
+      if radix_content.empty? || node_content.empty?
+        puts "❌ Failed to extract files from git history"
+        return false
+      end
+      
+      # Write to temporary files first
+      File.write('/tmp/performance_comparison/radix_tree_main.rb', radix_content)
+      File.write('/tmp/performance_comparison/node_main.rb', node_content)
+      
+      # Copy to target locations
+      FileUtils.cp('/tmp/performance_comparison/radix_tree_main.rb', radix_tree_path)
+      FileUtils.cp('/tmp/performance_comparison/node_main.rb', node_path)
+      
       puts "✅ Main branch files restored"
       true
-    else
-      puts "❌ Failed to restore main branch files"
+    rescue => e
+      puts "❌ Failed to restore main branch files: #{e.message}"
       false
     end
   end
@@ -61,19 +83,30 @@ class PerformanceComparison
       puts "Executing: ruby benchmark/performance_optimized.rb"
       puts "-" * 60
       
-      # Set PATH to include user gems
-      ENV['PATH'] = "/home/runner/.local/share/gem/ruby/3.2.0/bin:#{ENV['PATH']}"
+      # Set PATH to include user gems safely
+      original_path = ENV['PATH']
+      gem_path = "/home/runner/.local/share/gem/ruby/3.2.0/bin"
       
-      # Capture the output while displaying it
-      start_time = Time.now
-      success = system('ruby benchmark/performance_optimized.rb')
-      end_time = Time.now
+      # Validate gem path exists before adding to PATH
+      if File.directory?(gem_path)
+        ENV['PATH'] = "#{gem_path}:#{original_path}"
+      end
       
-      puts "-" * 60
-      puts "Benchmark completed in #{(end_time - start_time).round(2)} seconds"
-      puts "Exit status: #{success ? 'SUCCESS' : 'FAILED'}"
-      
-      success
+      begin
+        # Use safer command execution
+        start_time = Time.now
+        result = system('ruby', 'benchmark/performance_optimized.rb')
+        end_time = Time.now
+        
+        puts "-" * 60
+        puts "Benchmark completed in #{(end_time - start_time).round(2)} seconds"
+        puts "Exit status: #{result ? 'SUCCESS' : 'FAILED'}"
+        
+        result
+      ensure
+        # Restore original PATH
+        ENV['PATH'] = original_path
+      end
     end
   end
 

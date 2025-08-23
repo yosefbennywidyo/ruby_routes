@@ -20,14 +20,42 @@ class BenchmarkRunner
 
   def self.restore_main_branch_files
     puts "Restoring main branch files..."
-    # Get original files from before optimizations (commit 2ac1375)
-    system('cd /home/runner/work/ruby_routes/ruby_routes && git show 2ac1375:lib/ruby_routes/radix_tree.rb > /tmp/radix_tree_main.rb')
-    system('cd /home/runner/work/ruby_routes/ruby_routes && git show 2ac1375:lib/ruby_routes/node.rb > /tmp/node_main.rb')
     
-    FileUtils.cp('/tmp/radix_tree_main.rb', 
-                 '/home/runner/work/ruby_routes/ruby_routes/lib/ruby_routes/radix_tree.rb')
-    FileUtils.cp('/tmp/node_main.rb', 
-                 '/home/runner/work/ruby_routes/ruby_routes/lib/ruby_routes/node.rb')
+    begin
+      repo_path = '/home/runner/work/ruby_routes/ruby_routes'
+      commit_hash = '2ac1375'
+      
+      # Validate paths
+      radix_tree_path = File.join(repo_path, 'lib/ruby_routes/radix_tree.rb')
+      node_path = File.join(repo_path, 'lib/ruby_routes/node.rb')
+      
+      unless File.exist?(File.dirname(radix_tree_path)) && File.exist?(File.dirname(node_path))
+        puts "❌ Invalid file paths"
+        return false
+      end
+      
+      # Use IO.popen for safer command execution
+      radix_content = IO.popen(['git', '-C', repo_path, 'show', "#{commit_hash}:lib/ruby_routes/radix_tree.rb"], &:read)
+      node_content = IO.popen(['git', '-C', repo_path, 'show', "#{commit_hash}:lib/ruby_routes/node.rb"], &:read)
+      
+      if radix_content.empty? || node_content.empty?
+        puts "❌ Failed to extract files from git history"
+        return false
+      end
+      
+      # Write to temporary files
+      File.write('/tmp/radix_tree_main.rb', radix_content)
+      File.write('/tmp/node_main.rb', node_content)
+      
+      # Copy to target locations
+      FileUtils.cp('/tmp/radix_tree_main.rb', radix_tree_path)
+      FileUtils.cp('/tmp/node_main.rb', node_path)
+      
+      true
+    rescue => e
+      puts "❌ Error restoring main branch files: #{e.message}"
+      false
+    end
   end
 
   def self.restore_current_files
@@ -49,8 +77,20 @@ class BenchmarkRunner
     # Change to benchmark directory and run the performance script
     Dir.chdir('/home/runner/work/ruby_routes/ruby_routes/benchmark') do
       puts "Running performance_optimized.rb for #{version_name}..."
-      system('ruby performance_optimized.rb')
+      
+      # Use safer command execution
+      success = system('ruby', 'performance_optimized.rb')
+      
+      unless success
+        puts "❌ Benchmark failed for #{version_name}"
+        return false
+      end
+      
+      true
     end
+  rescue => e
+    puts "❌ Error running benchmark for #{version_name}: #{e.message}"
+    false
   end
 
   def self.run_comparison
