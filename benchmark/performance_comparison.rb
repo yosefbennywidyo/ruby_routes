@@ -356,9 +356,35 @@ end
 def run_version_in_subprocess(label)
   runner = File.join(Dir.tmpdir, "ruby_routes_runner_#{label.downcase}.rb")
   write_runner_script(runner)
-  env = { 'RR_VERSION' => label }
-  json = IO.popen(env, [RbConfig.ruby, runner], &:read)
-  JSON.parse(json, symbolize_names: true)
+
+  # SECURITY: validate runner path (prevents path tampering / traversal)
+  runner_path = File.expand_path(runner)
+  tmp_root    = File.expand_path(Dir.tmpdir)
+  unless runner_path.start_with?(tmp_root + File::SEPARATOR)
+    raise "Refusing to execute runner outside tmpdir"
+  end
+
+  # Ensure file permissions are not world-writable
+  st = File.stat(runner_path)
+  if (st.mode & 0o002) != 0
+    raise "Runner script is world-writable; aborting for safety"
+  end
+
+  env = { 'RR_VERSION' => label.to_s.freeze }.freeze
+
+  # Use Open3.capture3 with array form (no shell), reject if non‑zero exit
+  require 'open3'
+  stdout, stderr, status = Open3.capture3(env, RbConfig.ruby, runner_path)
+  unless status.success?
+    warn "[#{label}] subprocess failed (exit #{status.exitstatus})"
+    warn stderr unless stderr.empty?
+    return {}
+  end
+
+  JSON.parse(stdout, symbolize_names: true)
+rescue JSON::ParserError
+  warn "[#{label}] Non‑JSON output:\n#{stdout.inspect}"
+  {}
 end
 
 # Modified comparison to use subprocesses (isolated VM each time)
