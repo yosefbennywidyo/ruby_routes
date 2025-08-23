@@ -1,56 +1,99 @@
+# frozen_string_literal: true
+
 module RubyRoutes
   module Utility
+    # MethodUtility
+    #
+    # High‑performance HTTP method normalization avoiding core
+    # String#upcase allocations. Supports String, Symbol, and
+    # arbitrary objects (coerced via #to_s).
+    #
+    # Features:
+    # - Zero cost for already‑uppercase ASCII strings (fast scan).
+    # - Manual ASCII uppercasing (single pass) for a–z only.
+    # - Symbol fast path via interned constant map (SYMBOL_MAP).
+    # - Cache (METHOD_CACHE) for uncommon verbs or dynamic inputs.
+    #
+    # Thread Safety:
+    # - METHOD_CACHE is a shared Hash; occasional benign race
+    #   (double compute of same key) is acceptable. If strict
+    #   thread safety is required, wrap in a Mutex (not done to
+    #   preserve performance).
+    #
+    # @api internal
     module MethodUtility
-      # Fast tables
+      # Pre‑interned canonical uppercase strings for common verbs.
+      #
+      # @return [Hash{Symbol => String}]
       SYMBOL_MAP = {
-        get:    'GET'.freeze,
-        post:   'POST'.freeze,
-        put:    'PUT'.freeze,
-        patch:  'PATCH'.freeze,
-        delete: 'DELETE'.freeze,
-        head:   'HEAD'.freeze,
-        options:'OPTIONS'.freeze
+        get:     'GET'.freeze,
+        post:    'POST'.freeze,
+        put:     'PUT'.freeze,
+        patch:   'PATCH'.freeze,
+        delete:  'DELETE'.freeze,
+        head:    'HEAD'.freeze,
+        options: 'OPTIONS'.freeze
       }.freeze
 
-      # Cache for arbitrary/custom verbs (e.g. WebDAV) or lower/mixed case strings
+      # Cache for non‑predefined or previously seen method tokens.
+      # Keys: original String or Symbol
+      # Values: frozen uppercase String
+      #
+      # @return [Hash{(String,Symbol) => String}]
       METHOD_CACHE = {}
 
-      # Public: normalize any HTTP method-ish input to its canonical uppercase String.
-      # Avoids String#upcase; performs single-pass ASCII upcasing when needed, caching result.
-      def normalize_http_method(method)
-        case method
+      # Normalize an HTTP method‑like input to a canonical uppercase String.
+      #
+      # Fast paths:
+      # - Uppercase ASCII String: returned as‑is (no dup / freeze).
+      # - Symbol in SYMBOL_MAP: constant returned.
+      #
+      # Slow path:
+      # - Manual ASCII uppercasing (only a–z) + cached.
+      #
+      # @param method_input [String, Symbol, #to_s]
+      # @return [String] frozen canonical uppercase representation
+      def normalize_http_method(method_input)
+        case method_input
         when String
-          return method if already_upper_ascii?(method)
-          METHOD_CACHE[method] ||= ascii_upcase(method).freeze
+          return method_input if already_upper_ascii?(method_input)
+          METHOD_CACHE[method_input] ||= ascii_upcase(method_input).freeze
         when Symbol
-          SYMBOL_MAP[method] || (METHOD_CACHE[method] ||= ascii_upcase(method.to_s).freeze)
+          SYMBOL_MAP[method_input] || (METHOD_CACHE[method_input] ||= ascii_upcase(method_input.to_s).freeze)
         else
-          s = method.to_s
-          return s if already_upper_ascii?(s)
-          METHOD_CACHE[s] ||= ascii_upcase(s).freeze
+          coerced = method_input.to_s
+          return coerced if already_upper_ascii?(coerced)
+          METHOD_CACHE[coerced] ||= ascii_upcase(coerced).freeze
         end
       end
 
       private
 
-      # Fast check: all chars A-Z (ASCII only)
-      def already_upper_ascii?(str)
-        str.each_byte { |b| return false if b >= 97 && b <= 122 } # a-z
+      # Determine if a String consists solely of uppercase ASCII (A–Z) or non‑letters.
+      #
+      # @param candidate [String]
+      # @return [Boolean]
+      def already_upper_ascii?(candidate)
+        candidate.each_byte { |char_code| return false if char_code >= 97 && char_code <= 122 } # a-z
         true
       end
 
-      # Manual ASCII uppercasing (only alter a-z)
-      def ascii_upcase(str)
-        bytes = str.bytes
-        mutated = false
-        bytes.each_with_index do |b,i|
-          if b >= 97 && b <= 122
-            bytes[i] = b - 32
-            mutated = true
+      # Convert only ASCII lowercase letters (a–z) to uppercase in a single pass.
+      # Returns original String when no changes are needed to avoid allocation.
+      #
+      # @param original [String]
+      # @return [String] either original or a newly packed transformed String
+      def ascii_upcase(original)
+        byte_array = original.bytes
+        any_lowercase_transformed = false
+        byte_array.each_with_index do |char_code, idx|
+          if char_code >= 97 && char_code <= 122
+            byte_array[idx] = char_code - 32
+            any_lowercase_transformed = true
           end
         end
-        return str if !mutated
-        bytes.pack('C*')
+        return original unless any_lowercase_transformed
+        byte_array.pack('C*')
       end
     end
   end

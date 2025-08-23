@@ -1,173 +1,197 @@
 require_relative 'utility/route_utility'
 
 module RubyRoutes
+  # Router
+  #
+  # Public DSL entrypoint for defining application routes.
+  #
+  # Responsibilities:
+  # - Provides Rails‑inspired methods (get/post/put/patch/delete/match).
+  # - Resourceful routing helpers (#resources / #resource).
+  # - Scoping helpers: #namespace, #scope, #constraints, #defaults.
+  # - Reusable block groups via #concern / #concerns.
+  # - Mounting external Rack apps (#mount).
+  # - Builds and delegates to an underlying RouteSet.
+  #
+  # Scoping Stack:
+  # - Each scope pushes a hash (path/module/constraints/defaults).
+  # - New routes inherit merged values when defined.
+  #
+  # Thread safety: Define routes at boot (not thread‑safe for runtime mutation).
+  #
+  # @api public
   class Router
+    # @return [RouteSet] container of all compiled routes
     attr_reader :route_set
 
+    # Create a new Router and evaluate an optional DSL block.
+    #
+    # @yield (optional) route definition block
     def initialize(&block)
-      @route_set = RouteSet.new
+      @route_set   = RouteSet.new
       @route_utils = RubyRoutes::Utility::RouteUtility.new(@route_set)
       @scope_stack = []
-      @concerns = {}
+      @concerns    = {}
       instance_eval(&block) if block_given?
     end
 
-    # Basic route definition
-    def get(path, options = {})
-      add_route(path, options.merge(via: :get))
-    end
+    # ------------------------------------------------------------------
+    # HTTP Verb Helpers
+    # ------------------------------------------------------------------
 
-    def post(path, options = {})
-      add_route(path, options.merge(via: :post))
-    end
+    # Define a GET route.
+    def get(path, options = {})      ; add_route(path, options.merge(via: :get))    ; end
+    # Define a POST route.
+    def post(path, options = {})     ; add_route(path, options.merge(via: :post))   ; end
+    # Define a PUT route.
+    def put(path, options = {})      ; add_route(path, options.merge(via: :put))    ; end
+    # Define a PATCH route.
+    def patch(path, options = {})    ; add_route(path, options.merge(via: :patch))  ; end
+    # Define a DELETE route.
+    def delete(path, options = {})   ; add_route(path, options.merge(via: :delete)) ; end
 
-    def put(path, options = {})
-      add_route(path, options.merge(via: :put))
-    end
-
-    def patch(path, options = {})
-      add_route(path, options.merge(via: :patch))
-    end
-
-    def delete(path, options = {})
-      add_route(path, options.merge(via: :delete))
-    end
-
+    # Define a route accepting explicit :via or multiple verbs.
+    #
+    # @param path [String]
+    # @param options [Hash] must include :via or defaults handled by Route
     def match(path, options = {})
       add_route(path, options)
     end
 
-    # Resources routing (Rails-like)
+    # ------------------------------------------------------------------
+    # Resourceful Routing
+    # ------------------------------------------------------------------
+
+    # Define plural resource routes (index, new, create, show, edit, update, destroy).
+    #
+    # Supports nested resources via :nested option and nested block DSL.
+    #
+    # @param name [Symbol,String]
+    # @param options [Hash] :path, :controller, :nested
+    # @yield optional nested block
     def resources(name, options = {}, &block)
-      singular = name.to_s.singularize
-      plural = (options[:path] || name.to_s.pluralize)
-      controller = options[:controller] || plural
+      singular    = name.to_s.singularize
+      plural      = (options[:path] || name.to_s.pluralize)
+      controller  = options[:controller] || plural
 
-      # Collection routes
-      get "/#{plural}", options.merge(to: "#{controller}#index")
-      get "/#{plural}/new", options.merge(to: "#{controller}#new")
-      post "/#{plural}", options.merge(to: "#{controller}#create")
+      # Collection
+      get   "/#{plural}",             options.merge(to: "#{controller}#index")
+      get   "/#{plural}/new",         options.merge(to: "#{controller}#new")
+      post  "/#{plural}",             options.merge(to: "#{controller}#create")
 
-      # Member routes
-      get "/#{plural}/:id", options.merge(to: "#{controller}#show")
-      get "/#{plural}/:id/edit", options.merge(to: "#{controller}#edit")
-      put "/#{plural}/:id", options.merge(to: "#{controller}#update")
-      patch "/#{plural}/:id", options.merge(to: "#{controller}#update")
-      delete "/#{plural}/:id", options.merge(to: "#{controller}#destroy")
+      # Member
+      get   "/#{plural}/:id",         options.merge(to: "#{controller}#show")
+      get   "/#{plural}/:id/edit",    options.merge(to: "#{controller}#edit")
+      put   "/#{plural}/:id",         options.merge(to: "#{controller}#update")
+      patch "/#{plural}/:id",         options.merge(to: "#{controller}#update")
+      delete "/#{plural}/:id",        options.merge(to: "#{controller}#destroy")
 
-      # Nested resources if specified
+      # Simple nested resource support
       if options[:nested]
-        nested_name = options[:nested]
-        nested_singular = nested_name.to_s.singularize
-        nested_plural = nested_name.to_s.pluralize
+        nested_name     = options[:nested]
+        nested_plural   = nested_name.to_s.pluralize
 
-        get "/#{plural}/:id/#{nested_plural}", options.merge(to: "#{nested_plural}#index")
-        get "/#{plural}/:id/#{nested_plural}/new", options.merge(to: "#{nested_plural}#new")
-        post "/#{plural}/:id/#{nested_plural}", options.merge(to: "#{nested_plural}#create")
-        get "/#{plural}/:id/#{nested_plural}/:nested_id", options.merge(to: "#{nested_plural}#show")
-        get "/#{plural}/:id/#{nested_plural}/:nested_id/edit", options.merge(to: "#{nested_plural}#edit")
-        put "/#{plural}/:id/#{nested_plural}/:nested_id", options.merge(to: "#{nested_plural}#update")
-        patch "/#{plural}/:id/#{nested_plural}/:nested_id", options.merge(to: "#{nested_plural}#update")
-        delete "/#{plural}/:id/#{nested_plural}/:nested_id", options.merge(to: "#{nested_plural}#destroy")
+        get   "/#{plural}/:id/#{nested_plural}",                      options.merge(to: "#{nested_plural}#index")
+        get   "/#{plural}/:id/#{nested_plural}/new",                  options.merge(to: "#{nested_plural}#new")
+        post  "/#{plural}/:id/#{nested_plural}",                      options.merge(to: "#{nested_plural}#create")
+        get   "/#{plural}/:id/#{nested_plural}/:nested_id",           options.merge(to: "#{nested_plural}#show")
+        get   "/#{plural}/:id/#{nested_plural}/:nested_id/edit",      options.merge(to: "#{nested_plural}#edit")
+        put   "/#{plural}/:id/#{nested_plural}/:nested_id",           options.merge(to: "#{nested_plural}#update")
+        patch "/#{plural}/:id/#{nested_plural}/:nested_id",           options.merge(to: "#{nested_plural}#update")
+        delete "/#{plural}/:id/#{nested_plural}/:nested_id",          options.merge(to: "#{nested_plural}#destroy")
       end
 
-      # Handle concerns if block is given
       if block_given?
-        # Push a scope for nested resources
         @scope_stack.push({ path: "/#{plural}/:id" })
-        # Execute the block in the context of this router instance
         instance_eval(&block)
         @scope_stack.pop
       end
     end
 
+    # Define singular resource routes (show, new, create, edit, update, destroy).
+    #
+    # @param name [Symbol,String]
+    # @param options [Hash]
     def resource(name, options = {})
       singular = name.to_s.singularize
-
-      get "/#{singular}", options.merge(to: "#{singular}#show")
-      get "/#{singular}/new", options.merge(to: "#{singular}#new")
-      post "/#{singular}", options.merge(to: "#{singular}#create")
-      get "/#{singular}/edit", options.merge(to: "#{singular}#edit")
-      put "/#{singular}", options.merge(to: "#{singular}#update")
-      patch "/#{singular}", options.merge(to: "#{singular}#update")
-      delete "/#{singular}", options.merge(to: "#{singular}#destroy")
+      get    "/#{singular}",       options.merge(to: "#{singular}#show")
+      get    "/#{singular}/new",   options.merge(to: "#{singular}#new")
+      post   "/#{singular}",       options.merge(to: "#{singular}#create")
+      get    "/#{singular}/edit",  options.merge(to: "#{singular}#edit")
+      put    "/#{singular}",       options.merge(to: "#{singular}#update")
+      patch  "/#{singular}",       options.merge(to: "#{singular}#update")
+      delete "/#{singular}",       options.merge(to: "#{singular}#destroy")
     end
 
-    # Namespace support
+    # ------------------------------------------------------------------
+    # Scoping
+    # ------------------------------------------------------------------
+
+    # Namespace routes (adds path + module prefix).
+    #
+    # @param name [String,Symbol]
     def namespace(name, options = {}, &block)
       @scope_stack.push({ path: "/#{name}", module: name })
-
-      if block_given?
-        instance_eval(&block)
-      end
-
+      instance_eval(&block) if block_given?
       @scope_stack.pop
     end
 
-    # Scope support
+    # Generic scope for path/module/constraints/defaults.
+    #
+    # @param options_or_path [Hash,String]
     def scope(options_or_path = {}, &block)
-      # Handle the case where the first argument is a string (path)
-      options = if options_or_path.is_a?(String)
-                  { path: options_or_path }
-                else
-                  options_or_path
-                end
-
+      options = options_or_path.is_a?(String) ? { path: options_or_path } : options_or_path
       @scope_stack.push(options)
-
-      if block_given?
-        instance_eval(&block)
-      end
-
+      instance_eval(&block) if block_given?
       @scope_stack.pop
     end
 
-    # Root route
+    # Define root ("/") route (GET).
     def root(options = {})
       add_route("/", options.merge(via: :get))
     end
 
-    # Concerns (reusable route groups)
-    def concerns(*names, &block)
-      names.each do |name|
-        concern = @concerns[name]
-        raise "Concern '#{name}' not found" unless concern
-
-        instance_eval(&concern)
-      end
-
-      if block_given?
-        instance_eval(&block)
-      end
-    end
-
+    # Register reusable concern blocks by name.
+    #
+    # @param name [Symbol]
     def concern(name, &block)
       @concerns[name] = block
     end
 
-    # Route constraints
+    # Include previously defined concerns and optionally a block.
+    #
+    # @param names [Array<Symbol>]
+    def concerns(*names, &block)
+      names.each do |name|
+        concern = @concerns[name]
+        raise "Concern '#{name}' not found" unless concern
+        instance_eval(&concern)
+      end
+      instance_eval(&block) if block_given?
+    end
+
+    # Apply constraints (merged into scope).
+    #
+    # @param constraints [Hash]
     def constraints(constraints = {}, &block)
       @scope_stack.push({ constraints: constraints })
-
-      if block_given?
-        instance_eval(&block)
-      end
-
+      instance_eval(&block) if block_given?
       @scope_stack.pop
     end
 
-    # Defaults
+    # Apply default params (merged into scope).
+    #
+    # @param defaults [Hash]
     def defaults(defaults = {}, &block)
       @scope_stack.push({ defaults: defaults })
-
-      if block_given?
-        instance_eval(&block)
-      end
-
+      instance_eval(&block) if block_given?
       @scope_stack.pop
     end
 
-    # Mount other applications
+    # Mount an external Rack app at a path (adds splat for remainder).
+    #
+    # @param app [#call,String] rack app or identifier
+    # @param at [String,nil] mount path
     def mount(app, at: nil)
       path = at || "/#{app}"
       add_route("#{path}/*path", to: app, via: :all)
@@ -175,23 +199,26 @@ module RubyRoutes
 
     private
 
-    def add_route(path, options={})
+    # Internal route add after applying scope stack.
+    def add_route(path, options = {})
       scoped = apply_scope(path, options)
       @route_utils.define(scoped[:path], scoped)
     end
 
+    # Merge scopes into final path/options.
+    #
+    # Precedence: innermost (last pushed) overrides outer keys when merging.
     def apply_scope(path, options)
       scoped_options = options.dup
-      scoped_path = path
+      scoped_path    = path
 
       @scope_stack.reverse_each do |scope|
-        if scope[:path]
-          scoped_path = "#{scope[:path]}#{scoped_path}"
-        end
+        scoped_path = "#{scope[:path]}#{scoped_path}" if scope[:path]
 
         if scope[:module] && scoped_options[:to]
           controller = scoped_options[:to].to_s.split('#').first
-          scoped_options[:to] = "#{scope[:module]}/#{controller}##{scoped_options[:to].to_s.split('#').last}"
+          action     = scoped_options[:to].to_s.split('#').last
+          scoped_options[:to] = "#{scope[:module]}/#{controller}##{action}"
         end
 
         if scope[:constraints]

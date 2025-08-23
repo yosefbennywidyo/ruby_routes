@@ -75,7 +75,7 @@ RSpec.describe 'Segment Classes' do
 
     describe '#initialize' do
       it 'extracts parameter name from text' do
-        expect(segment.instance_variable_get(:@name)).to eq('id')
+        expect(segment.instance_variable_get(:@param_name)).to eq('id')
       end
     end
 
@@ -171,7 +171,7 @@ RSpec.describe 'Segment Classes' do
 
     describe '#initialize' do
       it 'extracts parameter name from text' do
-        expect(segment.instance_variable_get(:@name)).to eq('path')
+        expect(segment.instance_variable_get(:@param_name)).to eq('path')
       end
     end
 

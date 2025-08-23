@@ -6,13 +6,39 @@ require_relative 'lru_strategies/hit_strategy'
 require_relative 'lru_strategies/miss_strategy'
 
 module RubyRoutes
+  # Constant
+  #
+  # Central registry for lightweight immutable structures and singleton
+  # strategy objects used across routing components. Centralization keeps
+  # hot path code free of repeated allocations and magic numbers.
+  #
+  # Responsibilities:
+  # - Map first byte (ASCII) of a raw segment to its Segment subclass.
+  # - Provide lambda matchers for radix traversal (legacy / fallback).
+  # - Expose singleton LRU strategy objects (hit / miss).
+  # - Build compact Hash descriptors for parsed route path segments.
+  #
+  # Design Notes:
+  # - Numeric keys (42, 58) are ASCII codes for '*' and ':' allowing
+  #   O(1) dispatch without extra string comparisons.
+  # - Descriptor factories return frozen data to enable safe reuse.
+  #
+  # @api internal
   module Constant
+    # Maps a segment's first byte (ASCII) to a Segment class.
+    #
+    # Keys:
+    # 42 ('*')  -> Wildcard
+    # 58 (':')  -> Dynamic
+    # :default  -> Static
     SEGMENTS = {
       42 => RubyRoutes::Segments::WildcardSegment,   # '*'
       58 => RubyRoutes::Segments::DynamicSegment,    # ':'
       :default => RubyRoutes::Segments::StaticSegment
     }.freeze
 
+    # Legacy lambda-based segment matchers (kept for compatibility / fallback).
+    # Each lambda returns [next_node, stop_traversal] or nil when no match.
     SEGMENT_MATCHERS = {
       static: lambda do |node, segment, _idx, _segments, _params|
         child = node.static_children[segment]
@@ -21,38 +47,50 @@ module RubyRoutes
 
       dynamic: lambda do |node, segment, _idx, _segments, params|
         return nil unless node.dynamic_child
-        nxt = node.dynamic_child
-        params[nxt.param_name.to_s] = segment if params && nxt.param_name
-        [nxt, false]
+        next_node = node.dynamic_child
+        params[next_node.param_name.to_s] = segment if params && next_node.param_name
+        [next_node, false]
       end,
 
       wildcard: lambda do |node, _segment, idx, segments, params|
         return nil unless node.wildcard_child
-        nxt = node.wildcard_child
-        params[nxt.param_name.to_s] = segments[idx..-1].join('/') if params && nxt.param_name
-        [nxt, true]
+        next_node = node.wildcard_child
+        params[next_node.param_name.to_s] = segments[idx..-1].join('/') if params && next_node.param_name
+        [next_node, true]
       end,
 
-      # default returns nil (no match). RadixTree#find will then return [nil, {}].
+      # Default → no match
       default: lambda { |_node, _segment, _idx, _segments, _params| nil }
     }.freeze
 
-    # singleton instances to avoid per-LRU allocations
-    LRU_HIT_STRATEGY = RubyRoutes::LruStrategies::HitStrategy.new.freeze
+    # Singleton instances to avoid per-cache strategy allocations.
+    LRU_HIT_STRATEGY  = RubyRoutes::LruStrategies::HitStrategy.new.freeze
     LRU_MISS_STRATEGY = RubyRoutes::LruStrategies::MissStrategy.new.freeze
 
-    # Descriptor factories for segment classification (O(1) dispatch by first byte).
+    # Factories producing compact immutable descriptors for segments used
+    # during route compilation (faster than instantiating many objects).
+    #
+    # Returns Hash with keys:
+    # - type: :static | :param | :splat
+    # - value (for static) or name (for dynamic/splat)
     DESCRIPTOR_FACTORIES = {
       42 => ->(s) { { type: :splat,  name: (s[1..-1] || 'splat').freeze } }, # '*'
-      58 => ->(s) { { type: :param,  name:   s[1..-1].freeze } },             # ':'
-      :default => ->(s) { { type: :static, value:  s.freeze } }  # Intern static values
+      58 => ->(s) { { type: :param,  name: s[1..-1].freeze } },              # ':'
+      :default => ->(s) { { type: :static, value: s.freeze } }
     }.freeze
 
+    # Build a descriptor Hash for a raw segment string.
+    #
+    # @param raw [String, #to_s]
+    # @return [Hash] descriptor (frozen values inside)
+    #
+    # @example
+    #   Constant.segment_descriptor(":id") # => { type: :param, name: "id" }
     def self.segment_descriptor(raw)
-      s = raw.to_s
-      key = s.empty? ? :default : s.getbyte(0)
-      factory = DESCRIPTOR_FACTORIES[key] || DESCRIPTOR_FACTORIES[:default]
-      factory.call(s)
+      segment_string = raw.to_s
+      dispatch_key   = segment_string.empty? ? :default : segment_string.getbyte(0)
+      factory        = DESCRIPTOR_FACTORIES[dispatch_key] || DESCRIPTOR_FACTORIES[:default]
+      factory.call(segment_string)
     end
   end
 end
