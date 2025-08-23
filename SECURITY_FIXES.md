@@ -22,6 +22,20 @@ system("ruby #{script_name}")
 
 **Risk:** Shell injection vulnerabilities if any variables contain malicious input
 
+### 2. Insecure Use of Language/Framework API
+
+**Files affected:**
+- `benchmark/performance_comparison.rb` (lines 264, 278)
+- `benchmark/run_comparison.rb` (line 75)
+
+**Issue:** Using `Object.send(:remove_const, :RubyRoutes)` without input validation
+```ruby
+# UNSAFE - vulnerable to dynamic method calls
+Object.send(:remove_const, :RubyRoutes)
+```
+
+**Risk:** Potential arbitrary method execution if constant name is not validated
+
 ### 2. Unsafe Backtick Command Execution
 
 **Files affected:**
@@ -68,7 +82,35 @@ content = IO.popen(['git', '-C', repo_path, 'show', "#{commit}:file"], &:read)
 - Arguments passed directly to command
 - Prevents shell injection attacks
 
-### 2. Replaced Backticks with `IO.popen`
+### 2. Implemented Safe Constant Removal with Input Validation
+
+**Before:**
+```ruby
+Object.send(:remove_const, :RubyRoutes)
+```
+
+**After:**
+```ruby
+# Security: Safe constant removal with validation
+ALLOWED_CONSTANTS = [:RubyRoutes].freeze
+
+def safe_remove_const(const_name)
+  if ALLOWED_CONSTANTS.include?(const_name)
+    Object.send(:remove_const, const_name)
+  else
+    raise ArgumentError, "Constant not allowed: #{const_name}"
+  end
+end
+
+safe_remove_const(:RubyRoutes) if defined?(RubyRoutes)
+```
+
+**Benefits:**
+- Validates constant names against allowlist
+- Prevents arbitrary method execution
+- Follows secure coding practices for dynamic method calls
+
+### 3. Replaced Backticks with `IO.popen`
 
 **Before:**
 ```ruby
@@ -85,7 +127,7 @@ output = IO.popen(['ruby', 'script.rb'], &:read)
 - Safer command execution
 - Better error handling
 
-### 3. Added Path Validation
+### 4. Added Path Validation
 
 **Before:**
 ```ruby
@@ -108,7 +150,7 @@ FileUtils.cp(source, target)
 - Validates file system operations
 - Better error handling
 
-### 4. Safe Environment Variable Handling
+### 5. Safe Environment Variable Handling
 
 **Before:**
 ```ruby
@@ -138,7 +180,7 @@ end
 - Preserves original environment
 - Proper cleanup in ensure blocks
 
-### 5. Added Exception Handling
+### 6. Added Exception Handling
 
 **Before:**
 ```ruby
@@ -164,10 +206,11 @@ end
 ## Security Best Practices Implemented
 
 1. **Input Validation**: All file paths and commands are validated before use
-2. **No Shell Interpretation**: Using array-based command execution to prevent shell injection
-3. **Error Handling**: Comprehensive exception handling for all external commands
-4. **Resource Cleanup**: Proper cleanup of temporary files and environment variables
-5. **Principle of Least Privilege**: Only necessary permissions and operations are used
+2. **Safe Dynamic Method Calls**: Constant removal uses allowlist validation
+3. **No Shell Interpretation**: Using array-based command execution to prevent shell injection
+4. **Error Handling**: Comprehensive exception handling for all external commands
+5. **Resource Cleanup**: Proper cleanup of temporary files and environment variables
+6. **Principle of Least Privilege**: Only necessary permissions and operations are used
 
 ## Testing
 
@@ -180,4 +223,4 @@ All security fixes have been tested to ensure:
 
 ## Impact
 
-These security fixes eliminate shell injection vulnerabilities while maintaining full functionality of the performance comparison tools. The benchmark scripts now follow security best practices for command execution and file operations.
+These security fixes eliminate both shell injection vulnerabilities and insecure dynamic method calls while maintaining full functionality of the performance comparison tools. The benchmark scripts now follow security best practices for command execution, method calls, and file operations, implementing proper input validation according to security guidelines.

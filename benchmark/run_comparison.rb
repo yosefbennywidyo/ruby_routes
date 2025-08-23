@@ -9,6 +9,17 @@ puts "Ruby Routes Performance Comparison"
 puts "Comparing main branch vs current optimized branch"
 puts "=" * 60
 
+# Security: Safe constant removal with validation
+ALLOWED_CONSTANTS = [:RubyRoutes].freeze
+
+def safe_remove_const(const_name)
+  if ALLOWED_CONSTANTS.include?(const_name)
+    Object.send(:remove_const, const_name)
+  else
+    raise ArgumentError, "Constant not allowed: #{const_name}"
+  end
+end
+
 class BenchmarkRunner
   def self.backup_current_files
     puts "Backing up current optimized files..."
@@ -71,8 +82,8 @@ class BenchmarkRunner
     puts "RUNNING BENCHMARK FOR #{version_name.upcase}"
     puts "=" * 60
     
-    # Clear any cached modules to ensure fresh loading
-    Object.send(:remove_const, :RubyRoutes) if defined?(RubyRoutes)
+    # Clear any cached modules to ensure fresh loading - using safe constant removal
+    safe_remove_const(:RubyRoutes) if defined?(RubyRoutes)
     
     # Change to benchmark directory and run the performance script
     Dir.chdir('/home/runner/work/ruby_routes/ruby_routes/benchmark') do

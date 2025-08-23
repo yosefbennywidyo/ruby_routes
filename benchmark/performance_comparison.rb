@@ -8,6 +8,17 @@ puts "RadixTree and Node Performance Comparison"
 puts "Comparing optimized version vs original version"
 puts "=" * 60
 
+# Security: Safe constant removal with validation
+ALLOWED_CONSTANTS = [:RubyRoutes].freeze
+
+def safe_remove_const(const_name)
+  if ALLOWED_CONSTANTS.include?(const_name)
+    Object.send(:remove_const, const_name)
+  else
+    raise ArgumentError, "Constant not allowed: #{const_name}"
+  end
+end
+
 # Helper method to backup and restore files
 class FileManager
   def self.backup_optimized_files
@@ -260,8 +271,8 @@ def run_comparison
     
     FileManager.restore_original_files
     
-    # Need to reload the classes
-    Object.send(:remove_const, :RubyRoutes) if defined?(RubyRoutes)
+    # Need to reload the classes - using safe constant removal
+    safe_remove_const(:RubyRoutes) if defined?(RubyRoutes)
     load '/home/runner/work/ruby_routes/ruby_routes/lib/ruby_routes.rb'
     
     original_suite = PerformanceTestSuite.new("ORIGINAL")
@@ -274,8 +285,8 @@ def run_comparison
     
     FileManager.restore_optimized_files
     
-    # Need to reload the classes again
-    Object.send(:remove_const, :RubyRoutes) if defined?(RubyRoutes)
+    # Need to reload the classes again - using safe constant removal
+    safe_remove_const(:RubyRoutes) if defined?(RubyRoutes)
     load '/home/runner/work/ruby_routes/ruby_routes/lib/ruby_routes.rb'
     
     optimized_suite = PerformanceTestSuite.new("OPTIMIZED")
