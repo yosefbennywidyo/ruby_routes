@@ -1,210 +1,222 @@
+# frozen_string_literal: true
+
+require_relative 'utility/inflector_utility'
 require_relative 'utility/route_utility'
+require_relative 'router/http_helpers'
 
 module RubyRoutes
+  # RubyRoutes::Router
+  #
+  # Public DSL entrypoint for defining application routes.
+  #
+  # Usage:
+  #   router = RubyRoutes::Router.new do
+  #     get '/health', to: 'system#health'
+  #     resources :users
+  #     namespace :admin do
+  #       resources :posts
+  #     end
+  #   end
+  #
+  # Thread Safety:
+  #   Build routes at boot. Mutating after multiple threads start serving
+  #   requests is not supported.
+  #
+  # Responsibilities:
+  # - Provide Rails‑inspired DSL (get/post/put/patch/delete/match/root).
+  # - Define RESTful collections via `#resources` and singular via `#resource`.
+  # - Support scoping (namespace / scope / constraints / defaults).
+  # - Allow reusable blocks via concerns (`#concern` / `#concerns`).
+  # - Mount external Rack apps (`#mount`).
+  # - Delegate route object creation & storage to `RouteSet` / `RouteUtility`.
+  #
+  # Design Notes:
+  # - Scope stack is an array of shallow hashes (path/module/constraints/defaults).
+  # - Scopes are applied inner-first (reverse_each). For options (constraints/defaults),
+  #   inner values should override outer ones.
+  # - Options hashes passed by users are duplicated only when necessary
+  #   (see `build_route_options`) to reduce allocation churn.
+  #
+  # Public API Surface (Stable):
+  # - `#initialize` (block form)
+  # - HTTP verb helpers (`get/post/put/patch/delete/match`)
+  # - `#root`
+  # - `#resources` / `#resource`
+  # - `#namespace` / `#scope` / `#constraints` / `#defaults`
+  # - `#concern` / `#concerns`
+  # - `#mount`
+  #
+  # Internal / Subject to Change:
+  # - `#add_route`
+  # - `#apply_scope`
+  # - `#build_route_options`
+  # - `#push_scope`
+  #
+  # @api public
   class Router
+    VERBS_ALL = RubyRoutes::Constant::VERBS_ALL
+
     attr_reader :route_set
 
-    def initialize(&block)
-      @route_set = RouteSet.new
+    include RubyRoutes::Router::HttpHelpers
+
+    # Initialize the router.
+    #
+    # @param definition_block [Proc] The block to define routes.
+    def initialize(&definition_block)
+      @route_set   = RouteSet.new
       @route_utils = RubyRoutes::Utility::RouteUtility.new(@route_set)
       @scope_stack = []
-      @concerns = {}
-      instance_eval(&block) if block_given?
+      @concerns    = {}
+      instance_eval(&definition_block) if definition_block
     end
 
-    # Basic route definition
-    def get(path, options = {})
-      add_route(path, options.merge(via: :get))
+    # Build a finalized router.
+    #
+    # @param definition_block [Proc] The block to define routes.
+    # @return [Router] The finalized router.
+    def self.build(&definition_block)
+      new(&definition_block).finalize!
     end
 
-    def post(path, options = {})
-      add_route(path, options.merge(via: :post))
+    # Finalize router for DSL immutability.
+    #
+    # @return [Router] self.
+    def finalize!
+      return self if @frozen
+
+      @frozen = true
+      @scope_stack.freeze
+      @concerns.freeze
+      self
     end
 
-    def put(path, options = {})
-      add_route(path, options.merge(via: :put))
+    # Check if the router is frozen.
+    #
+    # @return [Boolean] `true` if the router is frozen, `false` otherwise.
+    def frozen?
+      !!@frozen
     end
 
-    def patch(path, options = {})
-      add_route(path, options.merge(via: :patch))
-    end
-
-    def delete(path, options = {})
-      add_route(path, options.merge(via: :delete))
-    end
-
-    def match(path, options = {})
-      add_route(path, options)
-    end
-
-    # Resources routing (Rails-like)
-    def resources(name, options = {}, &block)
-      singular = name.to_s.singularize
-      plural = (options[:path] || name.to_s.pluralize)
-      controller = options[:controller] || plural
-
-      # Collection routes
-      get "/#{plural}", options.merge(to: "#{controller}#index")
-      get "/#{plural}/new", options.merge(to: "#{controller}#new")
-      post "/#{plural}", options.merge(to: "#{controller}#create")
-
-      # Member routes
-      get "/#{plural}/:id", options.merge(to: "#{controller}#show")
-      get "/#{plural}/:id/edit", options.merge(to: "#{controller}#edit")
-      put "/#{plural}/:id", options.merge(to: "#{controller}#update")
-      patch "/#{plural}/:id", options.merge(to: "#{controller}#update")
-      delete "/#{plural}/:id", options.merge(to: "#{controller}#destroy")
-
-      # Nested resources if specified
-      if options[:nested]
-        nested_name = options[:nested]
-        nested_singular = nested_name.to_s.singularize
-        nested_plural = nested_name.to_s.pluralize
-
-        get "/#{plural}/:id/#{nested_plural}", options.merge(to: "#{nested_plural}#index")
-        get "/#{plural}/:id/#{nested_plural}/new", options.merge(to: "#{nested_plural}#new")
-        post "/#{plural}/:id/#{nested_plural}", options.merge(to: "#{nested_plural}#create")
-        get "/#{plural}/:id/#{nested_plural}/:nested_id", options.merge(to: "#{nested_plural}#show")
-        get "/#{plural}/:id/#{nested_plural}/:nested_id/edit", options.merge(to: "#{nested_plural}#edit")
-        put "/#{plural}/:id/#{nested_plural}/:nested_id", options.merge(to: "#{nested_plural}#update")
-        patch "/#{plural}/:id/#{nested_plural}/:nested_id", options.merge(to: "#{nested_plural}#update")
-        delete "/#{plural}/:id/#{nested_plural}/:nested_id", options.merge(to: "#{nested_plural}#destroy")
-      end
-
-      # Handle concerns if block is given
-      if block_given?
-        # Push a scope for nested resources
-        @scope_stack.push({ path: "/#{plural}/:id" })
-        # Execute the block in the context of this router instance
-        instance_eval(&block)
-        @scope_stack.pop
-      end
-    end
-
-    def resource(name, options = {})
-      singular = name.to_s.singularize
-
-      get "/#{singular}", options.merge(to: "#{singular}#show")
-      get "/#{singular}/new", options.merge(to: "#{singular}#new")
-      post "/#{singular}", options.merge(to: "#{singular}#create")
-      get "/#{singular}/edit", options.merge(to: "#{singular}#edit")
-      put "/#{singular}", options.merge(to: "#{singular}#update")
-      patch "/#{singular}", options.merge(to: "#{singular}#update")
-      delete "/#{singular}", options.merge(to: "#{singular}#destroy")
-    end
-
-    # Namespace support
-    def namespace(name, options = {}, &block)
-      @scope_stack.push({ path: "/#{name}", module: name })
-
-      if block_given?
-        instance_eval(&block)
-      end
-
-      @scope_stack.pop
-    end
-
-    # Scope support
-    def scope(options_or_path = {}, &block)
-      # Handle the case where the first argument is a string (path)
-      options = if options_or_path.is_a?(String)
-                  { path: options_or_path }
-                else
-                  options_or_path
-                end
-
-      @scope_stack.push(options)
-
-      if block_given?
-        instance_eval(&block)
-      end
-
-      @scope_stack.pop
-    end
-
-    # Root route
+    # Define a root route.
+    #
+    # @param options [Hash] The options for the root route.
+    # @return [Router] self.
     def root(options = {})
-      add_route("/", options.merge(via: :get))
+      add_route('/', build_route_options(options, :get))
+      self
     end
 
-    # Concerns (reusable route groups)
-    def concerns(*names, &block)
-      names.each do |name|
-        concern = @concerns[name]
-        raise "Concern '#{name}' not found" unless concern
+    # ---- RESTful Resources -------------------------------------------------
 
-        instance_eval(&concern)
+    # Define RESTful resources.
+    #
+    # @param resource_name [Symbol, String] The resource name.
+    # @param options [Hash] The options for the resource.
+    # @param nested_block [Proc] The block for nested routes.
+    # @return [Router] self.
+    def resources(resource_name, options = {}, &nested_block)
+      define_resource_routes(resource_name, options, &nested_block)
+    end
+
+    # Define a singular resource.
+    #
+    # @param resource_name [Symbol, String] The resource name.
+    # @param options [Hash] The options for the resource.
+    # @return [Router] self.
+    def resource(resource_name, options = {})
+      singular   = RubyRoutes::Utility::InflectorUtility.singularize(resource_name.to_s)
+      controller = options[:controller] || singular
+      define_singular_routes(singular, controller, options)
+    end
+
+    # ---- Scoping & Namespaces ----------------------------------------------
+
+    # Define a namespace.
+    #
+    # @param namespace_name [Symbol, String] The namespace name.
+    # @param options [Hash] The options for the namespace.
+    # @param block [Proc] The block for nested routes.
+    # @return [Router] self.
+    def namespace(namespace_name, options = {}, &block)
+      push_scope({ path: "/#{namespace_name}", module: namespace_name }.merge(options)) do
+        instance_eval(&block) if block
       end
+    end
 
-      if block_given?
-        instance_eval(&block)
+    # Define a scope.
+    #
+    # @param options_or_path [Hash, String] The options or path for the scope.
+    # @param block [Proc] The block for nested routes.
+    # @return [Router] self.
+    def scope(options_or_path = {}, &block)
+      scope_entry = options_or_path.is_a?(String) ? { path: options_or_path } : options_or_path
+      push_scope(scope_entry) { instance_eval(&block) if block }
+    end
+
+    # Define constraints.
+    #
+    # @param constraints_hash [Hash] The constraints for the scope.
+    # @param block [Proc] The block for nested routes.
+    # @return [Router] self.
+    def constraints(constraints_hash = {}, &block)
+      push_scope(constraints: constraints_hash) { instance_eval(&block) if block }
+    end
+
+    # Define defaults.
+    #
+    # @param defaults_hash [Hash] The default values for the scope.
+    # @param block [Proc] The block for nested routes.
+    # @return [Router] self.
+    def defaults(defaults_hash = {}, &block)
+      push_scope(defaults: defaults_hash) { instance_eval(&block) if block }
+    end
+
+    # ---- Concerns ----------------------------------------------------------
+
+    # Define a concern.
+    #
+    # @param concern_name [Symbol] The concern name.
+    # @param block [Proc] The block defining the concern.
+    # @return [void]
+    def concern(concern_name, &block)
+      ensure_unfrozen!
+      @concerns[concern_name] = block
+    end
+
+    # Use concerns.
+    #
+    # @param concern_names [Array<Symbol>] The names of the concerns to use.
+    # @param block [Proc] The block for additional routes.
+    # @return [void]
+    def concerns(*concern_names, &block)
+      concern_names.each do |name|
+        concern_block = @concerns[name]
+        raise "Concern '#{name}' not found" unless concern_block
+
+        instance_eval(&concern_block)
       end
+      instance_eval(&block) if block
     end
 
-    def concern(name, &block)
-      @concerns[name] = block
-    end
+    # ---- Mounting ----------------------------------------------------------
 
-    # Route constraints
-    def constraints(constraints = {}, &block)
-      @scope_stack.push({ constraints: constraints })
-
-      if block_given?
-        instance_eval(&block)
-      end
-
-      @scope_stack.pop
-    end
-
-    # Defaults
-    def defaults(defaults = {}, &block)
-      @scope_stack.push({ defaults: defaults })
-
-      if block_given?
-        instance_eval(&block)
-      end
-
-      @scope_stack.pop
-    end
-
-    # Mount other applications
+    # Mount an app.
+    #
+    # @param app [Object] The app to mount.
+    # @param at [String, nil] The path to mount the app at.
+    # @return [void]
     def mount(app, at: nil)
-      path = at || "/#{app}"
-      add_route("#{path}/*path", to: app, via: :all)
-    end
-
-    private
-
-    def add_route(path, options={})
-      scoped = apply_scope(path, options)
-      @route_utils.define(scoped[:path], scoped)
-    end
-
-    def apply_scope(path, options)
-      scoped_options = options.dup
-      scoped_path = path
-
-      @scope_stack.reverse_each do |scope|
-        if scope[:path]
-          scoped_path = "#{scope[:path]}#{scoped_path}"
-        end
-
-        if scope[:module] && scoped_options[:to]
-          controller = scoped_options[:to].to_s.split('#').first
-          scoped_options[:to] = "#{scope[:module]}/#{controller}##{scoped_options[:to].to_s.split('#').last}"
-        end
-
-        if scope[:constraints]
-          scoped_options[:constraints] = (scoped_options[:constraints] || {}).merge(scope[:constraints])
-        end
-
-        if scope[:defaults]
-          scoped_options[:defaults] = (scoped_options[:defaults] || {}).merge(scope[:defaults])
-        end
-      end
-
-      scoped_options[:path] = scoped_path
-      scoped_options
+      ensure_unfrozen!
+      mount_path = at || "/#{app}"
+      defaults = { _mounted_app: app }
+      add_route(
+        "#{mount_path}/*path",
+        controller: 'mounted',
+        action: :call,
+        via: VERBS_ALL,
+        defaults: defaults
+      )
     end
   end
 end

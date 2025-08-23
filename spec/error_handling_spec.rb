@@ -10,7 +10,7 @@ RSpec.describe 'Error Handling and Edge Cases' do
 
     it 'raises RouteNotFound for missing named routes' do
       route_set = RubyRoutes::RouteSet.new
-      
+
       expect {
         route_set.find_named_route(:nonexistent)
       }.to raise_error(RubyRoutes::RouteNotFound, "No route named 'nonexistent'")
@@ -18,7 +18,7 @@ RSpec.describe 'Error Handling and Edge Cases' do
 
     it 'raises RouteNotFound for missing path generation' do
       route_set = RubyRoutes::RouteSet.new
-      
+
       expect {
         route_set.generate_path(:nonexistent)
       }.to raise_error(RubyRoutes::RouteNotFound, "No route named 'nonexistent'")
@@ -41,7 +41,7 @@ RSpec.describe 'Error Handling and Edge Cases' do
     it 'handles multiple root routes' do
       router.root to: 'home#index'
       router.root to: 'pages#home'
-      
+
       # Should have two root routes
       root_routes = router.route_set.routes.select { |r| r.path == '/' }
       expect(root_routes.size).to eq(2)
@@ -62,7 +62,7 @@ RSpec.describe 'Error Handling and Edge Cases' do
           end
         end
       end
-      
+
       routes = router.route_set.routes
       expect(routes.any? { |r| r.path.include?('/api/v1/admin/users') }).to be true
     end
@@ -105,7 +105,7 @@ RSpec.describe 'Error Handling and Edge Cases' do
     it 'handles matching with malformed paths' do
       route = RubyRoutes::RadixTree.new('/users/:id', to: 'users#show')
       route_set.add_route(route)
-      
+
       # These should not crash
       expect(route_set.match('GET', '')).to be_nil
       expect(route_set.match('GET', '///')).to be_nil
@@ -115,9 +115,9 @@ RSpec.describe 'Error Handling and Edge Cases' do
     it 'handles very long cache keys' do
       route = RubyRoutes::RadixTree.new('/test', to: 'test#index')
       route_set.add_route(route)
-      
+
       long_path = '/test' + '?' + ('a=1&' * 1000)
-      
+
       expect { route_set.match('GET', long_path) }.not_to raise_error
     end
   end
@@ -143,13 +143,13 @@ RSpec.describe 'Error Handling and Edge Cases' do
     it 'handles parameter extraction' do
       route = RubyRoutes::RadixTree.new('/users/:id', to: 'users#show')
       params = route.extract_params('/users/123')
-      
+
       expect(params['id']).to eq('123')
     end
 
     it 'raises error for nil required parameters' do
       route = RubyRoutes::RadixTree.new('/users/:id', to: 'users#show', as: :user)
-      
+
       expect {
         route.generate_path(id: nil)
       }.to raise_error(RubyRoutes::RouteNotFound, /Missing or nil params: id/)
@@ -157,7 +157,7 @@ RSpec.describe 'Error Handling and Edge Cases' do
 
     it 'raises error for multiple nil required parameters' do
       route = RubyRoutes::RadixTree.new('/users/:user_id/posts/:id', to: 'posts#show', as: :user_post)
-      
+
       expect {
         route.generate_path(user_id: '123', id: nil)
       }.to raise_error(RubyRoutes::RouteNotFound, /Missing or nil params: id/)
@@ -165,7 +165,7 @@ RSpec.describe 'Error Handling and Edge Cases' do
 
     it 'allows nil for optional parameters' do
       route = RubyRoutes::RadixTree.new('/users/:id', to: 'users#show', as: :user)
-      
+
       # Optional parameters (not in path) can be nil
       expect {
         path = route.generate_path(id: '123', format: nil)
@@ -175,7 +175,7 @@ RSpec.describe 'Error Handling and Edge Cases' do
 
     it 'handles constraints with nil values' do
       route = RubyRoutes::RadixTree.new('/users/:id', to: 'users#show', constraints: { id: /\d+/ })
-      
+
       # Should not crash with nil parameter
       expect(route.match?('GET', '/users/')).to be false
     end
@@ -192,7 +192,7 @@ RSpec.describe 'Error Handling and Edge Cases' do
     it 'handles parameter name assignment' do
       node.param_name = 'test'
       expect(node.param_name).to eq('test')
-      
+
       node.param_name = nil
       expect(node.param_name).to be_nil
     end
@@ -217,19 +217,19 @@ RSpec.describe 'Error Handling and Edge Cases' do
   describe 'Memory and performance edge cases' do
     it 'handles large number of routes without memory issues' do
       router = RubyRoutes::Router.new
-      
+
       # Add many routes
       100.times do |i|
         router.get "/path#{i}", to: "controller#{i}#action#{i}"
       end
-      
+
       expect(router.route_set.size).to eq(100)
     end
 
     it 'handles deep parameter nesting' do
       route = RubyRoutes::RadixTree.new('/a/:a/b/:b/c/:c/d/:d/e/:e', to: 'test#show')
       params = route.extract_params('/a/1/b/2/c/3/d/4/e/5')
-      
+
       expect(params['a']).to eq('1')
       expect(params['e']).to eq('5')
     end
@@ -238,19 +238,61 @@ RSpec.describe 'Error Handling and Edge Cases' do
       route_set = RubyRoutes::RouteSet.new
       route = RubyRoutes::RadixTree.new('/users/:id', to: 'users#show')
       route_set.add_route(route)
-      
-      # Simulate concurrent access
+
+      # Warm up cache with repeated lookups (ensure cache is primed)
+      100.times { route_set.match('GET', '/users/42') }
+
+      # Simulate concurrent access (repeat lookups for cache hits)
       threads = 10.times.map do
         Thread.new do
-          100.times { |i| route_set.match('GET', "/users/#{i}") }
+          100.times do |i|
+            route_set.match('GET', "/users/#{i % 5}") # Only 5 unique paths, so hits will occur
+          end
         end
       end
-      
+
       threads.each(&:join)
-      
-      # Should not crash and should have cache hits
+
       stats = route_set.cache_stats
       expect(stats[:hits]).to be > 0
+    end
+  end
+
+  describe 'RadixTree Inserter edge cases' do
+    it 'handles insertion of routes with wildcard segments' do
+      expect {
+        RubyRoutes::RadixTree.new('/users/*path', to: 'users#catch_all')
+      }.not_to raise_error
+    end
+
+    it 'handles insertion of routes with nil path' do
+      expect {
+        RubyRoutes::RadixTree.new(nil, to: 'home#index')
+      }.not_to raise_error
+    end
+
+    it 'handles insertion of routes with empty path' do
+      expect {
+        RubyRoutes::RadixTree.new('', to: 'home#index')
+      }.not_to raise_error
+    end
+
+    it 'handles insertion of routes with multiple segments' do
+      expect {
+        RubyRoutes::RadixTree.new('/users/:id/posts/:post_id', to: 'posts#show')
+      }.not_to raise_error
+    end
+
+    it 'handles insertion of routes with special characters' do
+      expect {
+        RubyRoutes::RadixTree.new('/users-and-posts', to: 'users#index')
+      }.not_to raise_error
+    end
+
+    it 'handles insertion of routes with deep nesting' do
+      expect {
+        RubyRoutes::RadixTree.new('/api/v1/admin/users', to: 'admin#users')
+      }.not_to raise_error
     end
   end
 end

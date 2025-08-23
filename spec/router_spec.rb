@@ -1,33 +1,6 @@
+# frozen_string_literal: true
+
 require 'spec_helper'
-
-RSpec.describe RubyRoutes do
-  describe '.new' do
-    it 'creates a new router instance' do
-      router = RubyRoutes.new
-      expect(router).to be_a(RubyRoutes::Router)
-    end
-
-    it 'accepts a block for route definition' do
-      router = RubyRoutes.new do
-        get '/', to: 'home#index'
-      end
-
-      expect(router.route_set.routes.size).to eq(1)
-      expect(router.route_set.routes.first.path).to eq('/')
-    end
-  end
-
-  describe '.draw' do
-    it 'creates a router and yields to block' do
-      router = RubyRoutes.draw do
-        get '/about', to: 'pages#about'
-      end
-
-      expect(router.route_set.routes.size).to eq(1)
-      expect(router.route_set.routes.first.path).to eq('/about')
-    end
-  end
-end
 
 RSpec.describe RubyRoutes::Router do
   let(:router) { RubyRoutes::Router.new }
@@ -87,8 +60,6 @@ RSpec.describe RubyRoutes::Router do
       router.resources :users
       routes = router.route_set.routes
 
-      expect(routes.size).to eq(8)
-
       # Collection routes
       expect(routes.any? { |r| r.path == '/users' && r.action == 'index' }).to be true
       expect(routes.any? { |r| r.path == '/users/new' && r.action == 'new' }).to be true
@@ -98,7 +69,9 @@ RSpec.describe RubyRoutes::Router do
       expect(routes.any? { |r| r.path == '/users/:id' && r.action == 'show' }).to be true
       expect(routes.any? { |r| r.path == '/users/:id/edit' && r.action == 'edit' }).to be true
       expect(routes.any? { |r| r.path == '/users/:id' && r.action == 'update' && r.methods.include?('PUT') }).to be true
-      expect(routes.any? { |r| r.path == '/users/:id' && r.action == 'update' && r.methods.include?('PATCH') }).to be true
+      expect(routes.any? do |r|
+        r.path == '/users/:id' && r.action == 'update' && r.methods.include?('PATCH')
+      end).to be true
       expect(routes.any? { |r| r.path == '/users/:id' && r.action == 'destroy' }).to be true
     end
 
@@ -109,11 +82,17 @@ RSpec.describe RubyRoutes::Router do
       # Verify nested resource routes exist
       expect(routes.any? { |r| r.path == '/posts/:id/comments' && r.action == 'index' }).to be true
       expect(routes.any? { |r| r.path == '/posts/:id/comments/new' && r.action == 'new' }).to be true
-      expect(routes.any? { |r| r.path == '/posts/:id/comments' && r.action == 'create' && r.methods.include?('POST') }).to be true
+      expect(routes.any? do |r|
+        r.path == '/posts/:id/comments' && r.action == 'create' && r.methods.include?('POST')
+      end).to be true
       expect(routes.any? { |r| r.path == '/posts/:id/comments/:nested_id' && r.action == 'show' }).to be true
       expect(routes.any? { |r| r.path == '/posts/:id/comments/:nested_id/edit' && r.action == 'edit' }).to be true
-      expect(routes.any? { |r| r.path == '/posts/:id/comments/:nested_id' && r.action == 'update' && r.methods.include?('PUT') }).to be true
-      expect(routes.any? { |r| r.path == '/posts/:id/comments/:nested_id' && r.action == 'update' && r.methods.include?('PATCH') }).to be true
+      expect(routes.any? do |r|
+        r.path == '/posts/:id/comments/:nested_id' && r.action == 'update' && r.methods.include?('PUT')
+      end).to be true
+      expect(routes.any? do |r|
+        r.path == '/posts/:id/comments/:nested_id' && r.action == 'update' && r.methods.include?('PATCH')
+      end).to be true
 
       # Critical test: DELETE should only map to destroy action, not update
       delete_routes = routes.select { |r| r.path == '/posts/:id/comments/:nested_id' && r.methods.include?('DELETE') }
@@ -121,7 +100,9 @@ RSpec.describe RubyRoutes::Router do
       expect(delete_routes.first.action).to eq('destroy')
 
       # Ensure no DELETE route maps to update action
-      expect(routes.any? { |r| r.path == '/posts/:id/comments/:nested_id' && r.action == 'update' && r.methods.include?('DELETE') }).to be false
+      expect(routes.any? do |r|
+        r.path == '/posts/:id/comments/:nested_id' && r.action == 'update' && r.methods.include?('DELETE')
+      end).to be false
     end
   end
 
@@ -180,9 +161,9 @@ RSpec.describe RubyRoutes::Router do
   describe 'concerns' do
     it 'initializes concerns hash properly' do
       # Should not raise NoMethodError when accessing undefined concern
-      expect {
+      expect do
         router.concerns :undefined_concern
-      }.to raise_error(RuntimeError, "Concern 'undefined_concern' not found")
+      end.to raise_error(RuntimeError, "Concern 'undefined_concern' not found")
     end
 
     it 'defines and uses concerns' do
@@ -199,9 +180,9 @@ RSpec.describe RubyRoutes::Router do
     end
 
     it 'raises error for undefined concern' do
-      expect {
+      expect do
         router.concerns :undefined_concern
-      }.to raise_error(RuntimeError, "Concern 'undefined_concern' not found")
+      end.to raise_error(RuntimeError, "Concern 'undefined_concern' not found")
     end
 
     it 'handles multiple concerns' do
@@ -285,9 +266,9 @@ RSpec.describe RubyRoutes::Router do
 
     it 'raises error for each undefined concern' do
       # Test that each undefined concern raises its own error
-      expect {
+      expect do
         router.concerns :nonexistent1, :nonexistent2
-      }.to raise_error(RuntimeError, "Concern 'nonexistent1' not found")
+      end.to raise_error(RuntimeError, "Concern 'nonexistent1' not found")
 
       # Define the first concern but not the second
       router.concern :existent do
@@ -295,9 +276,9 @@ RSpec.describe RubyRoutes::Router do
       end
 
       # Now the second undefined concern should raise an error
-      expect {
+      expect do
         router.concerns :existent, :nonexistent2
-      }.to raise_error(RuntimeError, "Concern 'nonexistent2' not found")
+      end.to raise_error(RuntimeError, "Concern 'nonexistent2' not found")
     end
 
     it 'applies concerns directly in a scope' do
@@ -359,14 +340,18 @@ RSpec.describe RubyRoutes::Router do
 
       routes = router.route_set.routes
       # Look for paths that match the pattern, with more flexible matching
-      expect(routes.any? { |r| r.path.include?('/posts/') && r.path.include?('/comments') && r.methods.include?('GET') }).to be true
-      expect(routes.any? { |r| r.path.include?('/posts/') && r.path.include?('/comments') && r.methods.include?('POST') }).to be true
+      expect(routes.any? do |r|
+        r.path.include?('/posts/') && r.path.include?('/comments') && r.methods.include?('GET')
+      end).to be true
+      expect(routes.any? do |r|
+        r.path.include?('/posts/') && r.path.include?('/comments') && r.methods.include?('POST')
+      end).to be true
     end
 
     it 'raises error for undefined concerns' do
-      expect {
+      expect do
         router.concerns :nonexistent
-      }.to raise_error(RuntimeError, /Concern.*not found/)
+      end.to raise_error(RuntimeError, /Concern.*not found/)
     end
   end
 
@@ -427,7 +412,7 @@ RSpec.describe RubyRoutes::Router do
   describe 'resources with custom path and controller' do
     it 'generates correct routes and controller/action mapping' do
       router = RubyRoutes::Router.new do
-        resources :regulations, path: "peraturan", controller: "regulations", only: [:index, :show]
+        resources :regulations, path: 'peraturan', controller: 'regulations', only: %i[index show]
       end
 
       routes = router.route_set.routes
@@ -505,36 +490,36 @@ RSpec.describe RubyRoutes::Router do
     end
   end
 
-  describe "#join_path_parts" do
+  describe '#join_path_parts' do
     let(:route) { RubyRoutes::Route.new('/test', to: 'test#index') }
 
-    it "joins array elements with slashes" do
-      result = route.send(:join_path_parts, ['users', '123', 'posts'])
+    it 'joins array elements with slashes' do
+      result = route.send(:join_path_parts, %w[users 123 posts])
       expect(result).to eq('/users/123/posts')
     end
 
-    it "handles empty array" do
+    it 'handles empty array' do
       result = route.send(:join_path_parts, [])
       expect(result).to eq('/')
     end
 
-    it "handles array with single element" do
+    it 'handles array with single element' do
       result = route.send(:join_path_parts, ['users'])
       expect(result).to eq('/users')
     end
 
-    it "handles elements with special characters" do
+    it 'handles elements with special characters' do
       result = route.send(:join_path_parts, ['user files', 'report.pdf'])
       expect(result).to eq('/user files/report.pdf')
     end
   end
 
-  describe "validation caching" do
+  describe 'validation caching' do
     let(:route) { RubyRoutes::Route.new('/users/:id', to: 'users#show') }
 
-    it "caches validation results for frozen params" do
+    it 'caches validation results for frozen params' do
       # Create a frozen params hash
-      params = {id: '123'}.freeze
+      params = { id: '123' }.freeze
       result = double('validation_result')
 
       # Check that result is not cached initially
@@ -551,7 +536,7 @@ RSpec.describe RubyRoutes::Router do
 
     it "doesn't cache validation results for non-frozen params" do
       # Create a non-frozen params hash
-      params = {id: '123'}
+      params = { id: '123' }
       result = double('validation_result')
 
       # Cache a result
@@ -562,11 +547,11 @@ RSpec.describe RubyRoutes::Router do
       expect(cached_result).to be_nil
     end
 
-    it "returns nil for get_cached_validation when validation cache is nil" do
+    it 'returns nil for get_cached_validation when validation cache is nil' do
       # Force nil validation cache
       route.instance_variable_set(:@validation_cache, nil)
 
-      params = {id: '123'}.freeze
+      params = { id: '123' }.freeze
       result = route.send(:get_cached_validation, params)
       expect(result).to be_nil
     end

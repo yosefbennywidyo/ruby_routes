@@ -1,179 +1,166 @@
+# frozen_string_literal: true
+
 require_relative 'utility/key_builder_utility'
+require_relative 'utility/method_utility'
+require_relative 'route_set/cache_helpers'
+require_relative 'route_set/collection_helpers'
+require_relative 'route/param_support'
 
 module RubyRoutes
+  # RouteSet
+  #
+  # Collection + lookup facade for Route instances.
+  #
+  # Responsibilities:
+  # - Hold all defined routes (ordered).
+  # - Index named routes.
+  # - Provide fast recognition (method + path → route, params) with
+  #   a small in‑memory recognition cache.
+  # - Delegate structural path matching to an internal RadixTree.
+  #
+  # Thread safety: not thread‑safe; build during boot, read per request.
+  #
+  # @api public (primary integration surface)
   class RouteSet
     attr_reader :routes
 
     include RubyRoutes::Utility::KeyBuilderUtility
+    include RubyRoutes::Utility::MethodUtility
+    include RubyRoutes::RouteSet::CacheHelpers
+    include RubyRoutes::Route::ParamSupport
+    include RubyRoutes::RouteSet::CollectionHelpers
 
+    # Initialize empty collection and caches.
+    #
+    # @return [void]
     def initialize
-      @routes = []
-      @named_routes = {}
-      @recognition_cache = {}
-      @recognition_cache_max = 2048
-      @cache_hits = 0
-      @cache_misses = 0
-      @radix_tree = RadixTree.new
+      setup_caches
+      setup_radix_tree
     end
 
-    def add_to_collection(route)
-      @routes << route
-      @radix_tree.add(route.path, route.methods, route)
-      @named_routes[route.name] = route if route.named?
-    end
+    # Recognize a request (method + path) returning route + params.
+    #
+    # @param http_method [String, Symbol] The HTTP method (e.g., "GET").
+    # @param path [String] The request path.
+    # @return [Hash, nil] A hash containing the matched route and parameters, or `nil` if no match is found.
+    def match(http_method, path)
+      normalized_method = normalize_method_for_match(http_method)
+      raw_path = path.to_s
+      lookup_key = cache_key_for_request(normalized_method, raw_path)
 
-    alias_method :add_route, :add_to_collection
-
-    def find_route(method, path)
-      route, _ = @radix_tree.find(path, method)
-      route
-    end
-
-    def find_named_route(name)
-      route = @named_routes[name]
-      raise RouteNotFound.new("No route named '#{name}'") unless route
-      route
-    end
-
-    FAST_METHOD_MAP = {
-      get: 'GET', post: 'POST', put: 'PUT', patch: 'PATCH',
-      delete: 'DELETE', head: 'HEAD', options: 'OPTIONS'
-    }.freeze
-
-    def normalize_method_input(method)
-      case method
-      when Symbol
-        FAST_METHOD_MAP[method] || method.to_s.upcase
-      when String
-        # Fast path: assume already correct; fallback only for common lowercase
-        return method if method.length <= 6 && method == method.upcase
-        FAST_METHOD_MAP[method.downcase.to_sym] || method.upcase
-      else
-        s = method.to_s
-        FAST_METHOD_MAP[s.downcase.to_sym] || s.upcase
-      end
-    end
-    private :normalize_method_input
-
-    def match(method, path)
-      m = normalize_method_input(method)
-      raw = path.to_s
-      cache_key = cache_key_for_request(m, raw)
-
-      # Single cache lookup with proper hit accounting
-      if (hit = @recognition_cache[cache_key])
-        @cache_hits += 1
-        return hit
+      if (cached_result = fetch_cached_recognition(lookup_key))
+        return cached_result
       end
 
-      @cache_misses += 1
-
-      path_without_query, _qs = raw.split('?', 2)
-
-      # Use normalized method (m) for trie lookup
-      route, params = @radix_tree.find(path_without_query, m)
-      return nil unless route
-
-      merge_query_params(route, raw, params)
-
-      if route.respond_to?(:defaults) && route.defaults
-        route.defaults.each { |k,v| params[k.to_s] = v unless params.key?(k.to_s) }
-      end
-
-      result = {
-        route: route,
-        params: params,
-        controller: route.controller,
-        action: route.action
-      }
-
-      insert_cache_entry(cache_key, result)
+      result = perform_match(normalized_method, raw_path)
+      insert_cache_entry(lookup_key, result) if result
       result
     end
 
+    # Convenience alias for Rack‑style recognizer.
+    #
+    # @param path [String] The request path.
+    # @param method [String, Symbol] The HTTP method (default: "GET").
+    # @return [Hash, nil] A hash containing the matched route and parameters, or `nil` if no match is found.
     def recognize_path(path, method = 'GET')
       match(method, path)
     end
 
+    # Generate path via named route.
+    #
+    # @param name [Symbol, String] The name of the route.
+    # @param params [Hash] The parameters for path generation.
+    # @return [String] The generated path.
     def generate_path(name, params = {})
       route = find_named_route(name)
       route.generate_path(params)
     end
 
+    # Generate path from a direct route reference.
+    #
+    # @param route [Route] The route instance.
+    # @param params [Hash] The parameters for path generation.
+    # @return [String] The generated path.
     def generate_path_from_route(route, params = {})
       route.generate_path(params)
     end
 
-    def clear!
-      @routes.clear
-      @named_routes.clear
-      @recognition_cache.clear
-      @cache_hits = 0
-      @cache_misses = 0
-      # Create a new radix tree since we can't clear it
+    private
+
+    # Set up the radix tree for structural path matching.
+    #
+    # @return [void]
+    def setup_radix_tree
       @radix_tree = RadixTree.new
     end
 
-    def size
-      @routes.size
+    # Normalize the HTTP method for matching.
+    #
+    # @param http_method [String, Symbol] The HTTP method.
+    # @return [String] The normalized HTTP method.
+    def normalize_method_for_match(http_method)
+      if http_method.is_a?(String) && normalize_http_method(http_method).equal?(http_method)
+        http_method
+      else
+        normalize_http_method(http_method)
+      end
     end
 
-    def empty?
-      @routes.empty?
+    # Perform the route matching process.
+    #
+    # @param normalized_method [String] The normalized HTTP method.
+    # @param raw_path [String] The raw request path.
+    # @return [Hash, nil] A hash containing the matched route and parameters, or `nil` if no match is found.
+    def perform_match(normalized_method, raw_path)
+      path_without_query, _query = raw_path.split('?', 2)
+      matched_route, extracted_params = @radix_tree.find(path_without_query, normalized_method)
+      return nil unless matched_route
+
+      # Ensure we have a mutable hash for merging defaults / query params.
+      extracted_params = extracted_params.dup if extracted_params&.frozen?
+
+      merge_query_params(matched_route, raw_path, extracted_params)
+      merge_defaults(matched_route, extracted_params)
+      build_match_result(matched_route, extracted_params)
     end
 
-    def cache_stats
-      lookups = @cache_hits + @cache_misses
+    # Merge default parameters into the extracted parameters.
+    #
+    # @param matched_route [Route] The matched route.
+    # @param extracted_params [Hash] The extracted parameters.
+    # @return [void]
+    def merge_defaults(matched_route, extracted_params)
+      return unless matched_route.respond_to?(:defaults) && matched_route.defaults
+
+      matched_route.defaults.each { |key, value| extracted_params[key] = value unless extracted_params.key?(key) }
+    end
+
+    # Build the match result hash.
+    #
+    # @param matched_route [Route] The matched route.
+    # @param extracted_params [Hash] The extracted parameters.
+    # @return [Hash] A hash containing the matched route, parameters, controller, and action.
+    def build_match_result(matched_route, extracted_params)
       {
-        hits: @cache_hits,
-        misses: @cache_misses,
-        hit_rate: lookups.zero? ? 0.0 : (@cache_hits.to_f / lookups * 100.0),
-        size: @recognition_cache.size
+        route: matched_route,
+        params: extracted_params,
+        controller: matched_route.controller,
+        action: matched_route.action
       }
     end
 
-    def each(&block)
-      @routes.each(&block)
-    end
-
-    def include?(route)
-      @routes.include?(route)
-    end
-
-    private
-
-    def insert_cache_entry(key, value)
-      # unchanged cache insert (key already frozen & reusable)
-      if @recognition_cache.size >= @recognition_cache_max
-        @recognition_cache.keys.first(@recognition_cache_max / 4).each { |k| @recognition_cache.delete(k) }
-      end
-      @recognition_cache[key] = value
-    end
-
-    # Add the missing method for merging query params
-    def merge_query_params(route, path, params)
-      # Check for query string
-      if path.to_s.include?('?')
-        if route.respond_to?(:parse_query_params)
-          query_params = route.parse_query_params(path)
-          params.merge!(query_params) if query_params
-        elsif route.respond_to?(:query_params)
-          query_params = route.query_params(path)
-          params.merge!(query_params) if query_params
-        end
-      end
-    end
-
-    # Add thread-local params pool methods
-    def get_thread_local_params
+    # Obtain a pooled hash for temporary parameters.
+    #
+    # @return [Hash] A thread-local hash for temporary parameter storage.
+    def thread_local_params
       thread_params = Thread.current[:ruby_routes_params_pool] ||= []
-      if thread_params.empty?
-        {}
-      else
-        thread_params.pop.clear
-      end
+      thread_params.empty? ? {} : thread_params.pop.clear
     end
 
+    # Return a parameters hash to the thread-local pool.
+    #
+    # @param params [Hash] The parameters hash to return.
+    # @return [void]
     def return_params_to_pool(params)
       params.clear
       thread_pool = Thread.current[:ruby_routes_params_pool] ||= []

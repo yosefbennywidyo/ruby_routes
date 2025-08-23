@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'spec_helper'
 
 RSpec.describe RubyRoutes::RouteSet do
@@ -299,8 +301,8 @@ RSpec.describe RubyRoutes::RouteSet do
       recognition_cache = route_set.instance_variable_get(:@recognition_cache)
       expect(recognition_cache.size).to be <= small_max
 
-      expect(recognition_cache.key?("GET:/users/0")).to be false
-      expect(recognition_cache.key?("GET:/users/1")).to be false
+      expect(recognition_cache.key?('GET:/users/0')).to be false
+      expect(recognition_cache.key?('GET:/users/1')).to be false
     end
   end
 
@@ -340,6 +342,30 @@ RSpec.describe RubyRoutes::RouteSet do
 
       # Params should remain unchanged
       expect(params).to eq({ 'existing' => 'value' })
+    end
+  end
+
+  describe 'edge cases and error handling' do
+    it 'handles wildcard routes with different parameter names without collision' do
+      # Create two routes with different wildcard parameter names at different path positions
+      route1 = RubyRoutes::Route.new('/files/*path', methods: ['GET'], to: 'files#show')
+      route2 = RubyRoutes::Route.new('/docs/*splat', methods: ['GET'], to: 'docs#show')
+
+      # Add both routes to the route set (which uses a RadixTree internally)
+      route_set.add_route(route1)
+      route_set.add_route(route2)
+
+      # Test route1: should capture under 'path'
+      result1 = route_set.match('GET', '/files/docs/readme.txt')
+      expect(result1[:route]).to eq(route1)
+      expect(result1[:params]['path']).to eq('docs/readme.txt')
+      expect(result1[:params]['splat']).to be_nil  # Should not have the other param
+
+      # Test route2: should capture under 'splat'
+      result2 = route_set.match('GET', '/docs/images/logo.png')
+      expect(result2[:route]).to eq(route2)
+      expect(result2[:params]['splat']).to eq('images/logo.png')
+      expect(result2[:params]['path']).to be_nil  # Should not have the other param
     end
   end
 end

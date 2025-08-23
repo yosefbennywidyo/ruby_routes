@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'spec_helper'
 
 RSpec.describe RubyRoutes::UrlHelpers do
@@ -77,9 +79,9 @@ RSpec.describe RubyRoutes::UrlHelpers do
     end
 
     it 'raises error for non-existent route' do
-      expect {
+      expect do
         helper.path_to(:nonexistent)
-      }.to raise_error(RubyRoutes::RouteNotFound)
+      end.to raise_error(RubyRoutes::RouteNotFound)
     end
   end
 
@@ -241,18 +243,18 @@ RSpec.describe RubyRoutes::UrlHelpers do
       redirect = helper.redirect_to(:user, id: '123')
 
       expect(redirect).to eq({
-        status: 302,
-        location: '/users/123'
-      })
+                               status: 302,
+                               location: '/users/123'
+                             })
     end
 
     it 'generates redirect for simple routes' do
       redirect = helper.redirect_to(:about)
 
       expect(redirect).to eq({
-        status: 302,
-        location: '/about'
-      })
+                               status: 302,
+                               location: '/about'
+                             })
     end
   end
 
@@ -278,9 +280,7 @@ RSpec.describe RubyRoutes::UrlHelpers do
       test_class = Class.new do
         include RubyRoutes::UrlHelpers
 
-        def route_set
-          @route_set
-        end
+        attr_reader :route_set
 
         def initialize(rs)
           @route_set = rs
@@ -301,7 +301,7 @@ RSpec.describe RubyRoutes::UrlHelpers do
 
       # Test the helper
       expect(instance.user_path(id: 123)).to eq('/users/123')
-      expect(route_set).to have_received(:generate_path_from_route).with(route, {id: 123})
+      expect(route_set).to have_received(:generate_path_from_route).with(route, { id: 123 })
     end
   end
 end

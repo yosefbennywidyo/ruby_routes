@@ -78,17 +78,17 @@ end
 
 # Test paths for benchmarking
 test_paths = [
-  ['GET', '/'],
-  ['GET', '/users'],
-  ['GET', '/users/123'],
-  ['POST', '/users'],
-  ['GET', '/users/123/posts'],
-  ['GET', '/admin/users'],
-  ['GET', '/api/v1/users'],
-  ['GET', '/api/v2/posts/456'],
-  ['GET', '/products/789'],
-  ['GET', '/users/test@example.com'],
-  ['GET', '/posts/my-awesome-post']
+  [RubyRoutes::Constant::HTTP_GET, '/'],
+  [RubyRoutes::Constant::HTTP_GET, '/users'],
+  [RubyRoutes::Constant::HTTP_GET, '/users/123'],
+  [RubyRoutes::Constant::HTTP_POST, '/users'],
+  [RubyRoutes::Constant::HTTP_GET, '/users/123/posts'],
+  [RubyRoutes::Constant::HTTP_GET, '/admin/users'],
+  [RubyRoutes::Constant::HTTP_GET, '/api/v1/users'],
+  [RubyRoutes::Constant::HTTP_GET, '/api/v2/posts/456'],
+  [RubyRoutes::Constant::HTTP_GET, '/products/789'],
+  [RubyRoutes::Constant::HTTP_GET, '/users/test@example.com'],
+  [RubyRoutes::Constant::HTTP_GET, '/posts/my-awesome-post']
 ]
 
 # Warm up the cache
