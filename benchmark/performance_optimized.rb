@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 
 require 'benchmark'
-require 'memory_profiler'
+# require 'memory_profiler'  # Optional, not available in this environment
 require_relative '../lib/ruby_routes'
 
 # Create a router with many routes for realistic testing
