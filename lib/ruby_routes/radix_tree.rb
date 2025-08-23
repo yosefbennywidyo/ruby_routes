@@ -2,6 +2,9 @@ require_relative 'segment'
 require_relative 'utility/path_utility'
 
 module RubyRoutes
+  # RadixTree provides an optimized tree structure for fast route matching.
+  # Supports static segments, dynamic parameters (:param), and wildcards (*splat).
+  # Features longest prefix matching and improved LRU caching for performance.
   class RadixTree
     include RubyRoutes::Utility::PathUtility
 
@@ -24,6 +27,8 @@ module RubyRoutes
       @empty_segments = [].freeze
     end
 
+    # Add a route to the radix tree with specified path, HTTP methods, and handler.
+    # Returns the handler for method chaining.
     def add(path, methods, handler)
       # Normalize path
       normalized_path = normalize_path(path)
@@ -35,6 +40,8 @@ module RubyRoutes
       handler
     end
 
+    # Insert a route into the tree structure, creating nodes as needed.
+    # Supports static segments, dynamic parameters (:param), and wildcards (*splat).
     def insert_route(path_str, methods, handler)
       # Skip empty paths
       return handler if path_str.nil? || path_str.empty?
@@ -68,12 +75,13 @@ module RubyRoutes
           current_node = current_node.wildcard_child
           break  # Wildcard consumes the rest of the path
         else
-          # Static segment
-          unless current_node.static_children[segment]
-            current_node.static_children[segment] = Node.new
+          # Static segment - freeze key for memory efficiency and performance
+          segment_key = segment.freeze
+          unless current_node.static_children[segment_key]
+            current_node.static_children[segment_key] = Node.new
           end
 
-          current_node = current_node.static_children[segment]
+          current_node = current_node.static_children[segment_key]
         end
       end
 
@@ -87,6 +95,10 @@ module RubyRoutes
       handler
     end
 
+    # Find a matching route in the radix tree with longest prefix match support.
+    # Tracks the deepest endpoint node during traversal so partial matches return
+    # the longest valid prefix, increasing matching flexibility and correctness
+    # for overlapping/static/dynamic/wildcard routes.
     def find(path, method, params_out = {})
       # Handle empty path as root
       path_str = path.to_s
@@ -106,20 +118,43 @@ module RubyRoutes
       return [nil, params_out || {}] if segments.empty?
 
       params = params_out || {}
+      
+      # Track the longest prefix match (deepest endpoint found during traversal)
+      longest_match_node = nil
+      longest_match_params = nil
 
       # Traverse the tree to find matching route
       current_node = @root
       segments.each_with_index do |segment, i|
+        # Check if current node is a valid endpoint before trying to go deeper
+        if current_node.is_endpoint && current_node.handlers[method_str]
+          # Store this as our current best match
+          longest_match_node = current_node
+          longest_match_params = params.dup
+        end
+
         next_node, should_break = current_node.traverse_for(segment, i, segments, params)
 
-        # No match found for this segment
-        return [nil, params] unless next_node
+        # No match found for this segment - return longest prefix match if available
+        unless next_node
+          if longest_match_node
+            handler = longest_match_node.handlers[method_str]
+            if handler.respond_to?(:constraints)
+              constraints = handler.constraints
+              if constraints && !constraints.empty?
+                return check_constraints(handler, longest_match_params) ? [handler, longest_match_params] : [nil, params]
+              end
+            end
+            return [handler, longest_match_params]
+          end
+          return [nil, params]
+        end
 
         current_node = next_node
         break if should_break  # For wildcard paths
       end
 
-      # Check if node is an endpoint and has a handler for the method
+      # Check if final node is an endpoint and has a handler for the method
       if current_node.is_endpoint && current_node.handlers[method_str]
         handler = current_node.handlers[method_str]
 
@@ -131,6 +166,11 @@ module RubyRoutes
             if check_constraints(handler, params)
               return [handler, params]
             else
+              # If constraints fail, try longest prefix match as fallback
+              if longest_match_node
+                fallback_handler = longest_match_node.handlers[method_str]
+                return [fallback_handler, longest_match_params] if fallback_handler
+              end
               return [nil, params]
             end
           end
@@ -139,16 +179,33 @@ module RubyRoutes
         return [handler, params]
       end
 
+      # If we reach here, final node isn't an endpoint - return longest prefix match
+      if longest_match_node
+        handler = longest_match_node.handlers[method_str]
+        if handler.respond_to?(:constraints)
+          constraints = handler.constraints
+          if constraints && !constraints.empty?
+            return check_constraints(handler, longest_match_params) ? [handler, longest_match_params] : [nil, params]
+          end
+        end
+        return [handler, longest_match_params]
+      end
+
       [nil, params]
     end
 
     private
 
+    # Improved LRU Path Segment Cache: Accessed keys are moved to the end of the 
+    # order array to ensure proper LRU eviction behavior
     def split_path_cached(path)
       return @empty_segments if path == '/'
 
       # Check if path is in cache
       if @split_cache.key?(path)
+        # Move accessed key to end for proper LRU behavior
+        @split_cache_order.delete(path)
+        @split_cache_order << path
         return @split_cache[path]
       end
 
@@ -167,6 +224,8 @@ module RubyRoutes
       segments
     end
 
+    # Validates route constraints against extracted parameters.
+    # Returns true if all constraints pass, false otherwise.
     def check_constraints(handler, params)
       return true unless handler.respond_to?(:constraints)
 
