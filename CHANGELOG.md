@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.3.0 - 2025-09-02
+
+- Refactoring: Improved code organization, naming, and maintainability across router, route, segment, and utility modules.
+- Documentation: Enhanced documentation for clarity and consistency in UrlHelpers, Constant, and other modules.
+- Performance: Optimizations in caching strategies, parameter handling, and HTTP method normalization.
+- Additions: New utility modules (InflectorUtility, MethodUtility), constants, and comprehensive tests.
+- Fixes: Bug fixes in route insertion, constraint validation, and parameter handling.
+
 ## 1.1.0 - 2025-08-17
 
 - Route Matching Optimization: Reduced route matching time by ~40-50% through optimized cache key building and method normalization

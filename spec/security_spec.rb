@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'spec_helper'
 
 RSpec.describe 'Security Features' do
@@ -11,9 +13,9 @@ RSpec.describe 'Security Features' do
 
       # Simulate empty string parameter
       params = { 'id' => '' }
-      expect {
+      expect do
         route.send(:validate_constraints_fast!, params)
-      }.to raise_error(RubyRoutes::ConstraintViolation)
+      end.to raise_error(RubyRoutes::ConstraintViolation)
     end
 
     it 'validates nil values against constraints' do
@@ -21,9 +23,9 @@ RSpec.describe 'Security Features' do
 
       # Simulate nil parameter
       params = { 'id' => nil }
-      expect {
+      expect do
         route.send(:validate_constraints_fast!, params)
-      }.to raise_error(RubyRoutes::ConstraintViolation)
+      end.to raise_error(RubyRoutes::ConstraintViolation)
     end
 
     it 'protects against ReDoS attacks with regex constraints' do
@@ -32,24 +34,27 @@ RSpec.describe 'Security Features' do
       route = RubyRoutes::RadixTree.new('/test/:param', to: 'test#show', constraints: { param: evil_regex })
 
       # Input that would cause catastrophic backtracking
-      malicious_input = 'a' * 30 + 'X'
+      malicious_input = "#{'a' * 30}X"
 
       start_time = Time.now
-      expect {
+      expect do
         route.extract_params("/test/#{malicious_input}")
-      }.to raise_error(RubyRoutes::ConstraintViolation)
+      end.to raise_error(RubyRoutes::ConstraintViolation)
 
       # Should complete quickly due to timeout protection
       expect(Time.now - start_time).to be < 0.5
     end
 
     it 'protects against slow Proc constraints' do
-      slow_proc = ->(value) { sleep(1); true }
+      slow_proc = lambda { |_value|
+        sleep(1)
+        true
+      }
       route = RubyRoutes::RadixTree.new('/test/:param', to: 'test#show', constraints: { param: slow_proc })
 
-      expect {
+      expect do
         route.extract_params('/test/anything')
-      }.to raise_error(RubyRoutes::ConstraintViolation, /timed out/)
+      end.to raise_error(RubyRoutes::ConstraintViolation, /timed out/)
     end
 
     it 'validates UUID constraints properly' do
@@ -61,9 +66,9 @@ RSpec.describe 'Security Features' do
       expect(result['id']).to eq(valid_uuid)
 
       # Invalid UUID should fail
-      expect {
+      expect do
         route.extract_params('/users/not-a-uuid')
-      }.to raise_error(RubyRoutes::ConstraintViolation)
+      end.to raise_error(RubyRoutes::ConstraintViolation)
     end
 
     it 'validates integer constraints properly' do
@@ -74,9 +79,9 @@ RSpec.describe 'Security Features' do
       expect(result['id']).to eq('123')
 
       # Invalid integer should fail
-      expect {
+      expect do
         route.extract_params('/users/abc')
-      }.to raise_error(RubyRoutes::ConstraintViolation)
+      end.to raise_error(RubyRoutes::ConstraintViolation)
     end
 
     it 'validates email constraints' do
@@ -87,9 +92,9 @@ RSpec.describe 'Security Features' do
       expect(result['email']).to eq('test@example.com')
 
       # Invalid email should fail
-      expect {
+      expect do
         route.extract_params('/users/invalid-email')
-      }.to raise_error(RubyRoutes::ConstraintViolation)
+      end.to raise_error(RubyRoutes::ConstraintViolation)
     end
 
     it 'validates slug constraints' do
@@ -100,9 +105,9 @@ RSpec.describe 'Security Features' do
       expect(result['slug']).to eq('my-awesome-post')
 
       # Invalid slug should fail
-      expect {
+      expect do
         route.extract_params('/posts/My_Invalid Slug!')
-      }.to raise_error(RubyRoutes::ConstraintViolation)
+      end.to raise_error(RubyRoutes::ConstraintViolation)
     end
 
     it 'validates alpha constraints' do
@@ -113,9 +118,9 @@ RSpec.describe 'Security Features' do
       expect(result['name']).to eq('Technology')
 
       # Invalid alpha should fail
-      expect {
+      expect do
         route.extract_params('/categories/Tech123')
-      }.to raise_error(RubyRoutes::ConstraintViolation)
+      end.to raise_error(RubyRoutes::ConstraintViolation)
     end
 
     it 'validates alphanumeric constraints' do
@@ -126,79 +131,79 @@ RSpec.describe 'Security Features' do
       expect(result['code']).to eq('ABC123')
 
       # Invalid alphanumeric should fail
-      expect {
+      expect do
         route.extract_params('/codes/ABC-123')
-      }.to raise_error(RubyRoutes::ConstraintViolation)
+      end.to raise_error(RubyRoutes::ConstraintViolation)
     end
 
     it 'validates hash constraints with length limits' do
       route = RubyRoutes::RadixTree.new('/users/:username', to: 'users#show',
-                                       constraints: { username: { min_length: 3, max_length: 20 } })
+                                                            constraints: { username: { min_length: 3, max_length: 20 } })
 
       # Valid length should pass
       result = route.extract_params('/users/john')
       expect(result['username']).to eq('john')
 
       # Too short should fail
-      expect {
+      expect do
         route.extract_params('/users/jo')
-      }.to raise_error(RubyRoutes::ConstraintViolation, /too short/)
+      end.to raise_error(RubyRoutes::ConstraintViolation, /too short/)
 
       # Too long should fail
-      expect {
-        route.extract_params('/users/' + 'a' * 25)
-      }.to raise_error(RubyRoutes::ConstraintViolation, /too long/)
+      expect do
+        route.extract_params("/users/#{'a' * 25}")
+      end.to raise_error(RubyRoutes::ConstraintViolation, /too long/)
     end
 
     it 'validates hash constraints with allowed values' do
       route = RubyRoutes::RadixTree.new('/posts/:status', to: 'posts#show',
-                                       constraints: { status: { in: %w[draft published archived] } })
+                                                          constraints: { status: { in: %w[draft published archived] } })
 
       # Allowed value should pass
       result = route.extract_params('/posts/published')
       expect(result['status']).to eq('published')
 
       # Disallowed value should fail
-      expect {
+      expect do
         route.extract_params('/posts/invalid')
-      }.to raise_error(RubyRoutes::ConstraintViolation, /not in allowed list/)
+      end.to raise_error(RubyRoutes::ConstraintViolation, /not in allowed list/)
     end
 
     it 'validates hash constraints with forbidden values' do
       route = RubyRoutes::RadixTree.new('/users/:username', to: 'users#show',
-                                       constraints: { username: { not_in: %w[admin root system] } })
+                                                            constraints: { username: { not_in: %w[admin root system] } })
 
       # Allowed value should pass
       result = route.extract_params('/users/john')
       expect(result['username']).to eq('john')
 
       # Forbidden value should fail
-      expect {
+      expect do
         route.extract_params('/users/admin')
-      }.to raise_error(RubyRoutes::ConstraintViolation, /in forbidden list/)
+      end.to raise_error(RubyRoutes::ConstraintViolation, /in forbidden list/)
     end
 
     it 'validates hash constraints with numeric ranges' do
       route = RubyRoutes::RadixTree.new('/products/:price', to: 'products#show',
-                                       constraints: { price: { range: 1..1000 } })
+                                                            constraints: { price: { range: 1..1000 } })
 
       # Value in range should pass
       result = route.extract_params('/products/50')
       expect(result['price']).to eq('50')
 
       # Value out of range should fail
-      expect {
+      expect do
         route.extract_params('/products/2000')
-      }.to raise_error(RubyRoutes::ConstraintViolation, /not in allowed range/)
+      end.to raise_error(RubyRoutes::ConstraintViolation, /not in allowed range/)
     end
 
     it 'shows deprecation warning for Proc constraints' do
       constraint_proc = ->(value) { value.to_i > 100 }
       route = RubyRoutes::RadixTree.new('/test/:param', to: 'test#show', constraints: { param: constraint_proc })
 
-      expect {
+      expect do
         route.extract_params('/test/150')
-      }.to output(/DEPRECATION.*Proc constraints are deprecated/).to_stderr
+      end.to output(/DEPRECATION.*Proc constraints are deprecated/).to_stderr
     end
 
     it 'only shows deprecation warning once per parameter' do
@@ -206,14 +211,14 @@ RSpec.describe 'Security Features' do
       route = RubyRoutes::RadixTree.new('/test/:param', to: 'test#show', constraints: { param: constraint_proc })
 
       # First call should show warning
-      expect {
+      expect do
         route.extract_params('/test/150')
-      }.to output(/DEPRECATION/).to_stderr
+      end.to output(/DEPRECATION/).to_stderr
 
       # Second call should not show warning
-      expect {
+      expect do
         route.extract_params('/test/200')
-      }.not_to output(/DEPRECATION/).to_stderr
+      end.not_to output(/DEPRECATION/).to_stderr
     end
   end
 
@@ -251,7 +256,7 @@ RSpec.describe 'Security Features' do
       10.times do
         threads << Thread.new do
           100.times do
-            params = route_set.send(:get_thread_local_params)
+            params = route_set.send(:thread_local_params)
             params[:test] = Thread.current.object_id
             route_set.send(:return_params_to_pool, params)
           end
