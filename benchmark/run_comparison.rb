@@ -12,10 +12,10 @@ puts "=" * 60
 # Security: Safe constant removal with validation
 ALLOWED_CONSTANTS = [:RubyRoutes].freeze
 
-def safe_const(*const_name)
-  joined = const_name.join('').to_sym
-  if ALLOWED_CONSTANTS.include?(joined)
-    Object.send(:remove_const, joined)
+def safe_const(const_name)
+  symbolized = const_name.to_s.to_sym
+  if ALLOWED_CONSTANTS.include?(symbolized)
+    Object.send(:remove_const, symbolized)
   else
     raise ArgumentError, "Constant not allowed"
   end
@@ -84,7 +84,7 @@ class BenchmarkRunner
     puts "=" * 60
     
     # Clear any cached modules to ensure fresh loading - using safe constant removal
-    safe_const(:RubyRoutes) if defined?(RubyRoutes)
+    safe_const("RubyRoutes") if defined?(RubyRoutes)
     
     # Change to benchmark directory and run the performance script
     Dir.chdir('/home/runner/work/ruby_routes/ruby_routes/benchmark') do
