@@ -372,9 +372,26 @@ def run_version_in_subprocess(label)
 
   env = { 'RR_VERSION' => label.to_s.freeze }.freeze
 
-  # Use Open3.capture3 with array form (no shell), reject if non‑zero exit
-  require 'open3'
-  stdout, stderr, status = Open3.capture3(env, RbConfig.ruby, runner_path)
+  # Secure process spawn (no shell), separate pipes, minimal env
+  stdout = stderr = nil
+  status = nil
+
+  # Allow only whitelisted env key
+  safe_env = { 'RR_VERSION' => label.to_s }
+
+  r_out, w_out = IO.pipe
+  r_err, w_err = IO.pipe
+  pid = Process.spawn(safe_env, RbConfig.ruby, '--disable-gems', runner_path,
+                      out: w_out, err: w_err)
+  w_out.close
+  w_err.close
+  stdout = r_out.read
+  stderr = r_err.read
+  r_out.close
+  r_err.close
+  Process.wait(pid)
+  status = $?
+
   unless status.success?
     warn "[#{label}] subprocess failed (exit #{status.exitstatus})"
     warn stderr unless stderr.empty?
