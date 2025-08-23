@@ -120,23 +120,18 @@ module RubyRoutes
       params = params_out || {}
       
       # Track the longest prefix match (deepest endpoint found during traversal)
+      # Only consider nodes that actually match some part of the path
       longest_match_node = nil
       longest_match_params = nil
 
       # Traverse the tree to find matching route
       current_node = @root
       segments.each_with_index do |segment, i|
-        # Check if current node is a valid endpoint before trying to go deeper
-        if current_node.is_endpoint && current_node.handlers[method_str]
-          # Store this as our current best match
-          longest_match_node = current_node
-          longest_match_params = params.dup
-        end
-
         next_node, should_break = current_node.traverse_for(segment, i, segments, params)
 
-        # No match found for this segment - return longest prefix match if available
+        # No match found for this segment
         unless next_node
+          # Return longest prefix match if we found any valid endpoint during traversal
           if longest_match_node
             handler = longest_match_node.handlers[method_str]
             if handler.respond_to?(:constraints)
@@ -151,6 +146,14 @@ module RubyRoutes
         end
 
         current_node = next_node
+        
+        # Check if current node is a valid endpoint after successful traversal
+        if current_node.is_endpoint && current_node.handlers[method_str]
+          # Store this as our current best match
+          longest_match_node = current_node
+          longest_match_params = params.dup
+        end
+        
         break if should_break  # For wildcard paths
       end
 
@@ -167,7 +170,7 @@ module RubyRoutes
               return [handler, params]
             else
               # If constraints fail, try longest prefix match as fallback
-              if longest_match_node
+              if longest_match_node && longest_match_node != current_node
                 fallback_handler = longest_match_node.handlers[method_str]
                 return [fallback_handler, longest_match_params] if fallback_handler
               end
