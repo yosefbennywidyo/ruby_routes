@@ -104,6 +104,13 @@ module RubyRoutes
     # before oldest are overwritten in ring order.
     REQUEST_KEY_CAPACITY = 4096
 
+    RECORDED_METHODS = %i[
+      get post put patch delete match root
+      resources resource
+      namespace scope constraints defaults
+      mount concern concerns
+    ].freeze
+
     # Build a descriptor Hash for a raw segment string.
     #
     # @param raw [String, #to_s]
