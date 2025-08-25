@@ -28,6 +28,8 @@ module RubyRoutes
       class << self
         # Expose pool for diagnostics (read‑only).
         # @return [Hash]
+        # Diagnostic accessor. Returns a shallow copy so callers cannot
+        # mutate internal cache structures
         attr_reader :request_key_pool
 
         # Fetch (or create) a frozen "METHOD:PATH" composite key.
@@ -82,7 +84,7 @@ module RubyRoutes
       # @param delimiter [String] separator (default ':')
       # @return [String] frozen key string
       def build_key(components, delimiter = ':')
-        return ''.freeze if components.empty?
+        return RubyRoutes::Constant::EMPTY_STRING if components.empty?
         buffer = Thread.current[:ruby_routes_key_buf] ||= String.new
         buffer.clear
         index = 0
@@ -110,7 +112,7 @@ module RubyRoutes
       # @param merged [Hash{String=>Object}]
       # @return [String] frozen key (empty if none required)
       def cache_key_for_params(required_params, merged)
-        return ''.freeze if required_params.nil? || required_params.empty?
+        return RubyRoutes::Constant::EMPTY_STRING if required_params.nil? || required_params.empty?
         buffer = Thread.current[:ruby_routes_param_key_buf] ||= String.new
         buffer.clear
 
@@ -133,9 +135,6 @@ module RubyRoutes
         buffer.dup.freeze
       end
 
-      # Frozen empty key constant (shared).
-      EMPTY_PARAMS_KEY = ''.freeze
-
       # Reusable variant used in tight loops (same semantics as
       # cache_key_for_params). Kept separate to allow specialized tweaks
       # without changing public method.
@@ -144,7 +143,7 @@ module RubyRoutes
       # @param merged [Hash]
       # @return [String]
       def param_cache_key_reuse(required_params, merged)
-        return EMPTY_PARAMS_KEY if required_params.nil? || required_params.empty?
+        return RubyRoutes::Constant::EMPTY_STRING if required_params.nil? || required_params.empty?
         buffer = Thread.current[:ruby_routes_param_key_buf] ||= String.new
         buffer.clear
 
