@@ -50,7 +50,7 @@ module RubyRoutes
     # @param method [String, Symbol]
     # @return [Object, nil]
     def get_handler(method)
-      @handlers[method]
+      @handlers[normalize_method(method)]
     end
 
     # Traverse to the most specific child for a single path segment.
