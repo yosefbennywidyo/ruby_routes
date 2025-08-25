@@ -115,7 +115,7 @@ module RubyRoutes
     # @return [Array<(Object, Hash)>] [handler_or_nil, params_hash]
     def find(request_path_input, request_method_input, params_out = {})
       request_path      = request_path_input.to_s
-      normalized_method = request_method_input.to_s.upcase
+      normalized_method = normalize_http_method(request_method_input)
 
       if request_path.empty? || request_path == '/'
         return @root_node.is_endpoint && @root_node.handlers[normalized_method] ?
