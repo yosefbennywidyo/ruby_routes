@@ -74,7 +74,10 @@ module RubyRoutes
     # - type: :static | :param | :splat
     # - value (for static) or name (for dynamic/splat)
     DESCRIPTOR_FACTORIES = {
-      42 => ->(s) { { type: :splat,  name: (s[1..-1] || 'splat').freeze } }, # '*'
+      42 => ->(s) {
+        name = s[1..-1]
+        { type: :splat, name: (name.nil? || name.empty? ? 'splat' : name).freeze }
+      }, # '*'
       58 => ->(s) { { type: :param,  name: s[1..-1].freeze } },              # ':'
       :default => ->(s) { { type: :static, value: s.freeze } }
     }.freeze
