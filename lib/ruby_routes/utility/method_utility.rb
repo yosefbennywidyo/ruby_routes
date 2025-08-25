@@ -26,13 +26,13 @@ module RubyRoutes
       #
       # @return [Hash{Symbol => String}]
       SYMBOL_MAP = {
-        get:     'GET'.freeze,
-        post:    'POST'.freeze,
-        put:     'PUT'.freeze,
-        patch:   'PATCH'.freeze,
-        delete:  'DELETE'.freeze,
-        head:    'HEAD'.freeze,
-        options: 'OPTIONS'.freeze
+        get:     RubyRoutes::Constant::HTTP_GET,
+        post:    RubyRoutes::Constant::HTTP_POST,
+        put:     RubyRoutes::Constant::HTTP_PUT,
+        patch:   RubyRoutes::Constant::HTTP_PATCH,
+        delete:  RubyRoutes::Constant::HTTP_DELETE,
+        head:    RubyRoutes::Constant::HTTP_HEAD,
+        options: RubyRoutes::Constant::HTTP_OPTIONS
       }.freeze
 
       # Cache for non‑predefined or previously seen method tokens.
