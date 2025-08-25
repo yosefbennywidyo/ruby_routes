@@ -43,10 +43,9 @@ module RubyRoutes
       #   split_path('/users/123?x=1') # => ["users", "123"]
       #   split_path('/')              # => []
       def split_path(raw_path)
-        path_no_query = raw_path.split('?', 2).first
-        path_no_lead  = path_no_query.start_with?('/') ? path_no_query[1..-1] : path_no_query
-        trimmed       = (path_no_lead.end_with?('/') && path_no_lead != RubyRoutes::Constant::ROOT_PATH) ? path_no_lead[0...-1] : path_no_lead
-        trimmed.empty? ? [] : trimmed.split('/')
+        path_no_query = raw_path.to_s.split('?', 2).first
+        return [] if path_no_query.empty?
+        path_no_query.split('/').reject { |segment| segment.empty? }
       end
 
       # Join path parts into a normalized absolute path.
