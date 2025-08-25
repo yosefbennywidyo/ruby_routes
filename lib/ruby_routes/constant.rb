@@ -100,6 +100,10 @@ module RubyRoutes
     EMPTY_STRING = ''.freeze
     EMPTY_HASH   = {}.freeze
 
+    # Maximum number of distinct (method,path) composite keys retained
+    # before oldest are overwritten in ring order.
+    REQUEST_KEY_CAPACITY = 4096
+
     # Build a descriptor Hash for a raw segment string.
     #
     # @param raw [String, #to_s]
