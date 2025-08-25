@@ -6,6 +6,7 @@ require_relative "ruby_routes/url_helpers"
 require_relative "ruby_routes/router"
 require_relative "ruby_routes/radix_tree"
 require_relative "ruby_routes/node"
+require_relative 'ruby_routes/router/builder'
 
 module RubyRoutes
   class Error < StandardError; end
