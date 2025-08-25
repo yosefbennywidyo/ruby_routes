@@ -52,18 +52,21 @@ module RubyRoutes
       # - Manual ASCII uppercasing (only a–z) + cached.
       #
       # @param method_input [String, Symbol, #to_s]
-      # @return [String] frozen canonical uppercase representation
+      # @return [String] canonical uppercase representation
+      #   (cached/transformed values are frozen; uppercase fast-path may returns the original String)
       def normalize_http_method(method_input)
         case method_input
         when String
-          return method_input if already_upper_ascii?(method_input)
-          METHOD_CACHE[method_input] ||= ascii_upcase(method_input).freeze
+          key = method_input.frozen? ? method_input : method_input.dup.freeze
+          return key if already_upper_ascii?(key)
+          METHOD_CACHE[key] ||= ascii_upcase(key).freeze
         when Symbol
           SYMBOL_MAP[method_input] || (METHOD_CACHE[method_input] ||= ascii_upcase(method_input.to_s).freeze)
         else
           coerced = method_input.to_s
-          return coerced if already_upper_ascii?(coerced)
-          METHOD_CACHE[coerced] ||= ascii_upcase(coerced).freeze
+          key     = coerced.frozen? ? coerced : coerced.dup.freeze
+          return key if already_upper_ascii?(key)
+          METHOD_CACHE[key] ||= ascii_upcase(key).freeze
         end
       end
 
