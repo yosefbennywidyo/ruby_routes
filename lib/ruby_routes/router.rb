@@ -1,4 +1,5 @@
 require_relative 'utility/route_utility'
+require_relative 'utility/inflector_utility'
 
 module RubyRoutes
   # Router
@@ -70,7 +71,9 @@ module RubyRoutes
     # @param options [Hash] :path, :controller, :nested
     # @yield optional nested block
     def resources(name, options = {}, &block)
-      singular    = name.to_s.singularize
+      base_name   = name.to_s
+      plural_path  = RubyRoutes::Utility::InflectorUtility.pluralize(options[:path] || base_name)
+      singular     = RubyRoutes::Utility::InflectorUtility.singularize(base_name)
       plural      = (options[:path] || name.to_s.pluralize)
       controller  = options[:controller] || plural
 
@@ -103,8 +106,11 @@ module RubyRoutes
 
       if block_given?
         @scope_stack.push({ path: "/#{plural}/:id" })
-        instance_eval(&block)
-        @scope_stack.pop
+        begin
+          instance_eval(&block)
+        ensure
+          @scope_stack.pop
+        end
       end
     end
 
@@ -113,7 +119,8 @@ module RubyRoutes
     # @param name [Symbol,String]
     # @param options [Hash]
     def resource(name, options = {})
-      singular = name.to_s.singularize
+      singular    = RubyRoutes::Utility::InflectorUtility.singularize(name.to_s)
+      controller  = options[:controller] || singular
       get    "/#{singular}",       options.merge(to: "#{singular}#show")
       get    "/#{singular}/new",   options.merge(to: "#{singular}#new")
       post   "/#{singular}",       options.merge(to: "#{singular}#create")
@@ -188,13 +195,33 @@ module RubyRoutes
       @scope_stack.pop
     end
 
-    # Mount an external Rack app at a path (adds splat for remainder).
+    # Mount an external Rack (or Rack‑compatible) app at a path.
     #
-    # @param app [#call,String] rack app or identifier
-    # @param at [String,nil] mount path
+    # Usage:
+    #   mount MyRackApp, at: "/app"
+    #   mount ->(env) { [200, {'Content-Type'=>'text/plain'}, ['OK']] }, at: "/lambda"
+    #
+    # Implementation detail:
+    # - Route currently requires controller/action; we map to a synthetic
+    #   controller + :call action so validation passes.
+    # - The actual rack app object is stored in defaults under :_mounted_app
+    #   so downstream dispatcher can fetch and invoke it.
+    #
+    # If you later relax Route validation to allow direct callables,
+    # you can switch to: add_route("#{path}/*path", to: app, via: VERBS_ALL)
+    VERBS_ALL = [:get, :post, :put, :patch, :delete, :head, :options].freeze
+
     def mount(app, at: nil)
-      path = at || "/#{app}"
-      add_route("#{path}/*path", to: app, via: :all)
+      mount_path = at || "/#{app}"
+      # Synthetic controller/action identifiers
+      defaults = { _mounted_app: app }
+      add_route(
+        "#{mount_path}/*path",
+        controller: 'mounted',
+        action: :call,
+        via: VERBS_ALL,
+        defaults: defaults
+      )
     end
 
     private
