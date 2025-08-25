@@ -753,7 +753,7 @@ RSpec.describe RubyRoutes::Route do
         expect(validation_cache).not_to be_nil
 
         # Cache should be empty initially
-        expect(validation_cache.instance_variable_get(:@h)).to be_empty
+        expect(validation_cache.instance_variable_get(:@hash)).to be_empty
 
         # Cache a result
         route.send(:cache_validation_result, params, result)

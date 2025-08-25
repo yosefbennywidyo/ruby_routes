@@ -76,19 +76,26 @@ def print_object_counts(before_counts = nil)
   counts
 end
 
+# Hoisted HTTP method constants to avoid per‑iteration upcasing in hot loops
+HTTP_GET     = 'GET'.freeze
+HTTP_POST    = 'POST'.freeze
+HTTP_PUT     = 'PUT'.freeze
+HTTP_PATCH   = 'PATCH'.freeze
+HTTP_DELETE  = 'DELETE'.freeze
+
 # Test paths for benchmarking
 test_paths = [
-  ['GET', '/'],
-  ['GET', '/users'],
-  ['GET', '/users/123'],
-  ['POST', '/users'],
-  ['GET', '/users/123/posts'],
-  ['GET', '/admin/users'],
-  ['GET', '/api/v1/users'],
-  ['GET', '/api/v2/posts/456'],
-  ['GET', '/products/789'],
-  ['GET', '/users/test@example.com'],
-  ['GET', '/posts/my-awesome-post']
+  [HTTP_GET, '/'],
+  [HTTP_GET, '/users'],
+  [HTTP_GET, '/users/123'],
+  [HTTP_POST, '/users'],
+  [HTTP_GET, '/users/123/posts'],
+  [HTTP_GET, '/admin/users'],
+  [HTTP_GET, '/api/v1/users'],
+  [HTTP_GET, '/api/v2/posts/456'],
+  [HTTP_GET, '/products/789'],
+  [HTTP_GET, '/users/test@example.com'],
+  [HTTP_GET, '/posts/my-awesome-post']
 ]
 
 # Warm up the cache

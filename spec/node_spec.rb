@@ -14,7 +14,7 @@ RSpec.describe RubyRoutes::Node do
     it 'adds a handler for an HTTP method' do
       handler = double('handler')
       node.add_handler('GET', handler)
-      
+
       expect(node.get_handler('GET')).to eq(handler)
       expect(node.is_endpoint).to be true
     end
@@ -51,17 +51,10 @@ RSpec.describe RubyRoutes::Node do
       expect(node.is_endpoint).to be true
     end
 
-    it 'does not normalize in get_handler (requires upstream normalization)' do
+    it 'returns the handler regardless of method case (normalizes internally)' do
       node.add_handler(:get, { controller: 'users', action: 'index' })
-      expect(node.get_handler('get')).to be_nil
+      expect(node.get_handler('get')).to eq({ controller: 'users', action: 'index' })
       expect(node.get_handler('GET')).to eq({ controller: 'users', action: 'index' })
-    end
-
-    it 'requires uppercase string for get_handler when given a symbol' do
-      handler = { controller: 'users', action: 'index' }
-      node.add_handler(:get, handler)
-      expect(node.get_handler(:get)).to be_nil
-      expect(node.get_handler('GET')).to eq(handler)
     end
   end
 
@@ -73,7 +66,7 @@ RSpec.describe RubyRoutes::Node do
     it 'returns the correct handler for a method' do
       handler = double('handler')
       node.add_handler('GET', handler)
-      
+
       expect(node.get_handler('GET')).to eq(handler)
     end
   end
@@ -89,9 +82,9 @@ RSpec.describe RubyRoutes::Node do
     it 'returns nil when no children exist' do
       segments = ['users', '123']
       params = {}
-      
+
       result, should_break = node.traverse_for('users', 0, segments, params)
-      
+
       expect(result).to be_nil
       expect(should_break).to be false
       expect(params).to be_empty
@@ -101,12 +94,12 @@ RSpec.describe RubyRoutes::Node do
       # Set up static child
       static_child = RubyRoutes::Node.new
       node.instance_variable_set(:@static_children, { 'users' => static_child })
-      
+
       segments = ['users', '123']
       params = {}
-      
+
       result, should_break = node.traverse_for('users', 0, segments, params)
-      
+
       expect(result).to eq(static_child)
       expect(should_break).to be false
       expect(params).to be_empty # Static match doesn't capture params
@@ -117,12 +110,12 @@ RSpec.describe RubyRoutes::Node do
       dynamic_child = RubyRoutes::Node.new
       dynamic_child.param_name = 'id'
       node.instance_variable_set(:@dynamic_child, dynamic_child)
-      
+
       segments = ['users', '123']
       params = {}
-      
+
       result, should_break = node.traverse_for('123', 0, segments, params)
-      
+
       expect(result).to eq(dynamic_child)
       expect(should_break).to be false
       expect(params['id']).to eq('123')
@@ -133,12 +126,12 @@ RSpec.describe RubyRoutes::Node do
       wildcard_child = RubyRoutes::Node.new
       wildcard_child.param_name = 'path'
       node.instance_variable_set(:@wildcard_child, wildcard_child)
-      
+
       segments = ['files', 'docs', 'readme.txt']
       params = {}
-      
+
       result, should_break = node.traverse_for('docs', 1, segments, params)
-      
+
       expect(result).to eq(wildcard_child)
       expect(should_break).to be true # Wildcard breaks traversal
       expect(params['path']).to eq('docs/readme.txt')
@@ -149,12 +142,12 @@ RSpec.describe RubyRoutes::Node do
       wildcard_child = RubyRoutes::Node.new
       wildcard_child.param_name = 'file'
       node.instance_variable_set(:@wildcard_child, wildcard_child)
-      
+
       segments = ['uploads', 'image.jpg']
       params = {}
-      
+
       result, should_break = node.traverse_for('image.jpg', 1, segments, params)
-      
+
       expect(result).to eq(wildcard_child)
       expect(should_break).to be true
       expect(params['file']).to eq('image.jpg') # Single segment, no join
@@ -165,15 +158,15 @@ RSpec.describe RubyRoutes::Node do
       static_child = RubyRoutes::Node.new
       dynamic_child = RubyRoutes::Node.new
       dynamic_child.param_name = 'id'
-      
+
       node.instance_variable_set(:@static_children, { 'new' => static_child })
       node.instance_variable_set(:@dynamic_child, dynamic_child)
-      
+
       segments = ['users', 'new']
       params = {}
-      
+
       result, should_break = node.traverse_for('new', 1, segments, params)
-      
+
       # Should match static, not dynamic
       expect(result).to eq(static_child)
       expect(should_break).to be false
@@ -185,16 +178,16 @@ RSpec.describe RubyRoutes::Node do
       dynamic_child = RubyRoutes::Node.new
       dynamic_child.param_name = 'id'
       node.instance_variable_set(:@dynamic_child, dynamic_child)
-      
+
       segments = ['users', '123']
-      
+
       result, should_break = node.traverse_for('123', 0, segments, nil)
-      
+
       expect(result).to eq(dynamic_child)
       expect(should_break).to be false
       # Should not crash when params is nil
     end
-    
+
     it 'overwrites an existing handler for the same method' do
       initial_handler = { controller: 'users', action: 'show' }
       new_handler = { controller: 'users', action: 'show_v2' }
@@ -226,23 +219,10 @@ RSpec.describe RubyRoutes::Node do
       expect(node.is_endpoint).to be true
     end
 
-    it 'does not normalize in get_handler (requires upstream normalization)' do
+    it 'returns the handler regardless of method case (normalizes internally)' do
       node.add_handler(:get, { controller: 'users', action: 'index' })
-      expect(node.get_handler('get')).to be_nil
+      expect(node.get_handler('get')).to eq({ controller: 'users', action: 'index' })
       expect(node.get_handler('GET')).to eq({ controller: 'users', action: 'index' })
-    end
-
-    it 'requires uppercase string for get_handler when given a symbol' do
-      handler = { controller: 'users', action: 'index' }
-      node.add_handler(:get, handler)
-      expect(node.get_handler(:get)).to be_nil
-      expect(node.get_handler('GET')).to eq(handler)
-    end
-    it 'requires uppercase string for get_handler when given a symbol' do
-      handler = { controller: 'users', action: 'index' }
-      node.add_handler(:get, handler)
-      expect(node.get_handler(:get)).to be_nil
-      expect(node.get_handler('GET')).to eq(handler)
     end
 
     it 'returns nil for unregistered methods' do

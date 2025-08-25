@@ -121,7 +121,7 @@ RSpec.describe 'Performance Optimizations' do
       route = RubyRoutes::RadixTree.new('/test', to: 'test#index', via: :get)
 
       # Should use the same object for GET method
-      expect(route.methods.first).to equal(RubyRoutes::Route::HTTP_GET)
+      expect(route.methods.first).to equal(RubyRoutes::Constant::HTTP_GET)
     end
 
     it 'freezes static segment values for memory efficiency' do
