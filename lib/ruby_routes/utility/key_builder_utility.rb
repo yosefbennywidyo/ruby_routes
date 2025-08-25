@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module RubyRoutes
   module Utility
     # KeyBuilderUtility
@@ -42,37 +44,51 @@ module RubyRoutes
         # @param http_method [String]
         # @param request_path [String]
         # @return [String] frozen canonical key
+        # Optimized (hot path) composite request key fetch.
+        #
+        # Goals:
+        # - Zero allocations on hit (no new Strings / Arrays)
+        # - Single interpolation & freeze on miss
+        # - O(1) bounded eviction via fixed-size ring buffer
+        #
+        # Inputs MUST be Strings (caller responsibility). They can be unfrozen;
+        # we dup+freeze only once on first insertion.
         def fetch_request_key(http_method, request_path)
+          # Normalize to frozen canonical keys (cheap guard)
           method_key = http_method.frozen? ? http_method : http_method.dup.freeze
           path_key   = request_path.frozen? ? request_path : request_path.dup.freeze
-          if (path_map = @request_key_pool[method_key])
-            if (composite_key = path_map[path_key])
-              return composite_key
+
+          # Bucket lookup
+          if (bucket = @request_key_pool[method_key])
+            if (composite = bucket[path_key])
+              return composite # HOT HIT → return immediately (zero alloc)
             end
-          end
-
-            composite_key = "#{http_method}:#{request_path}".freeze
-          if path_map
-            path_map[request_path] = composite_key
           else
-            @request_key_pool[method_key] = { path_key => composite_key }
+            # Initialize bucket only when method first seen
+            bucket = @request_key_pool[method_key] = {}
           end
 
+          # MISS: build composite once
+          composite = "#{method_key}:#{path_key}".freeze
+          bucket[path_key] = composite
+
+          # Ring population / eviction
           if @entry_count < RubyRoutes::Constant::REQUEST_KEY_CAPACITY
-            @request_key_ring[@entry_count] = [http_method, request_path]
+            @request_key_ring[@entry_count] = [method_key, path_key]
             @entry_count += 1
           else
-            evict_method, evict_path = @request_key_ring[@ring_index]
-            evict_bucket = @request_key_pool[evict_method]
-            if evict_bucket&.delete(evict_path) && evict_bucket.empty?
-              @request_key_pool.delete(evict_method)
+            m_old, p_old = @request_key_ring[@ring_index]
+            old_bucket = @request_key_pool[m_old]
+            if old_bucket
+              old_bucket.delete(p_old)
+              @request_key_pool.delete(m_old) if old_bucket.empty?
             end
-            @request_key_ring[@ring_index] = [http_method, request_path]
+            @request_key_ring[@ring_index] = [method_key, path_key]
             @ring_index += 1
             @ring_index = 0 if @ring_index == RubyRoutes::Constant::REQUEST_KEY_CAPACITY
           end
 
-          composite_key
+          composite
         end
       end
 
