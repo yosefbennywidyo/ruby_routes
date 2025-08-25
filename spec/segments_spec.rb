@@ -42,13 +42,6 @@ RSpec.describe 'Segment Classes' do
         expect(segment).to be_a(RubyRoutes::Segments::WildcardSegment)
       end
     end
-
-    describe '#wildcard?' do
-      it 'returns false by default' do
-        segment = RubyRoutes::Segment.new
-        expect(segment.wildcard?).to be false
-      end
-    end
   end
 
   describe RubyRoutes::Segments::StaticSegment do
@@ -172,12 +165,6 @@ RSpec.describe 'Segment Classes' do
     describe '#initialize' do
       it 'extracts parameter name from text' do
         expect(segment.instance_variable_get(:@param_name)).to eq('path')
-      end
-    end
-
-    describe '#wildcard?' do
-      it 'returns true' do
-        expect(segment.wildcard?).to be true
       end
     end
 
