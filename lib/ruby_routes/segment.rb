@@ -34,12 +34,5 @@ module RubyRoutes
       segment_class = RubyRoutes::Constant::SEGMENTS[segment_key] || RubyRoutes::Constant::SEGMENTS[:default]
       segment_class.new(segment_text)
     end
-
-    # Default implementation; overridden by WildcardSegment.
-    #
-    # @return [Boolean] always false here
-    def wildcard?
-      false
-    end
   end
 end
