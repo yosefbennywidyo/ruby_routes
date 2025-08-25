@@ -57,14 +57,14 @@ module RubyRoutes
       def normalize_http_method(method_input)
         case method_input
         when String
-          key = method_input.frozen? ? method_input : method_input.dup.freeze
+          key = method_input.frozen? ? method_input : method_input
           return key if already_upper_ascii?(key)
           METHOD_CACHE[key] ||= ascii_upcase(key).freeze
         when Symbol
           SYMBOL_MAP[method_input] || (METHOD_CACHE[method_input] ||= ascii_upcase(method_input.to_s).freeze)
         else
           coerced = method_input.to_s
-          key     = coerced.frozen? ? coerced : coerced.dup.freeze
+          key     = coerced.frozen? ? coerced : coerced
           return key if already_upper_ascii?(key)
           METHOD_CACHE[key] ||= ascii_upcase(key).freeze
         end
