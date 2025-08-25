@@ -142,7 +142,7 @@ module RubyRoutes
         unless next_node
           if best_match_node
             handler = best_match_node.handlers[normalized_method]
-            return check_constraints(handler, best_match_params) ? [handler, best_match_params] : [nil, extracted_params]
+            return check_constraints(handler, best_match_params) ? [handler, best_match_params] : [nil, captured_params ]
           end
           return [nil, captured_params]
         end
