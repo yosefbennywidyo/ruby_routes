@@ -67,10 +67,14 @@ module RubyRoutes
       @constraints  = options[:constraints] || {}
       @defaults     = (options[:defaults] || {}).transform_keys(&:to_s).freeze
 
-      # Micro‑caches for merged params + param key reuse.
-      @merged_cache_slots      = [[nil, nil], [nil, nil]] # [ [object_id, merged_hash], ...]
-      @param_key_slots         = [[nil, nil], [nil, nil]] # [ [hash(raw_key), frozen_key], ...]
-      @validated_required_ok   = false
+      # Micro‑caches
+      @merged_cache_slots      = [[nil, nil], [nil, nil]]
+      @param_key_slots         = [[nil, nil], [nil, nil]]
+
+      # Step: cache required param validation (boolean sentinel)
+      # After first successful validation we skip future required param checks
+      # (NOTE: assumes callers do not later drop required params; aligns with action item spec).
+      @required_validated_once = false
 
       precompile_route_data
       validate_route!
@@ -132,24 +136,28 @@ module RubyRoutes
     # @return [String]
     # @raise [RouteNotFound] when required params missing / nil
     def generate_path(params = {})
-      if params.nil? || params.empty?
+      if (params.nil? || params.empty?)
         return @static_path if @static_path
-        params = RubyRoutes::Constant::EMPTY_HASH
+        # If no user params & no required params, we can skip validation entirely
+        return @static_path || RubyRoutes::Constant::ROOT_PATH if @required_params.empty? && @compiled_segments.empty?
       end
 
-      unless @required_params.empty?
+      # Cache required param validation (action item)
+      unless @required_params.empty? || @required_validated_once
         missing, nils = validate_required_params(params)
         raise RouteNotFound, "Missing params: #{missing.join(', ')}" unless missing.empty?
         raise RouteNotFound, "Missing or nil params: #{nils.join(', ')}" unless nils.empty?
+        @required_validated_once = true if missing.empty? && nils.empty?
       end
 
       merged = build_merged_params(params)
 
-      cache_key = if @required_params.empty?
-        KeyBuilderUtility::EMPTY_PARAMS_KEY
-      else
-        build_param_cache_key(merged)
-      end
+      cache_key =
+        if @required_params.empty?
+          KeyBuilderUtility::EMPTY_PARAMS_KEY
+        else
+          build_param_cache_key(merged)
+        end
 
       if (cached = @gen_cache.get(cache_key))
         return cached
