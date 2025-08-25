@@ -13,9 +13,6 @@ module RubyRoutes
     #
     # Thread safety: stateless (all methods pure).
     module PathUtility
-      # Canonical root path constant.
-      ROOT_PATH = '/'.freeze
-
       # Normalize a raw path string.
       #
       # Rules:
@@ -48,7 +45,7 @@ module RubyRoutes
       def split_path(raw_path)
         path_no_query = raw_path.split('?', 2).first
         path_no_lead  = path_no_query.start_with?('/') ? path_no_query[1..-1] : path_no_query
-        trimmed       = (path_no_lead.end_with?('/') && path_no_lead != ROOT_PATH) ? path_no_lead[0...-1] : path_no_lead
+        trimmed       = (path_no_lead.end_with?('/') && path_no_lead != RubyRoutes::Constant::ROOT_PATH) ? path_no_lead[0...-1] : path_no_lead
         trimmed.empty? ? [] : trimmed.split('/')
       end
 
