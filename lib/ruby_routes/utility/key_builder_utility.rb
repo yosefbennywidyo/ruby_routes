@@ -14,16 +14,12 @@ module RubyRoutes
     # - Bounded memory (REQUEST_KEY_CAPACITY ring).
     # - Thread safety not required (intended for single request thread use).
     module KeyBuilderUtility
-      # Maximum number of distinct (method,path) composite keys retained
-      # before oldest are overwritten in ring order.
-      REQUEST_KEY_CAPACITY = 4096
-
       # @!visibility private
       # { "GET" => { "/users" => "GET:/users" } }
       @request_key_pool = {}
       # @!visibility private
       # Circular buffer holding [method_string, path_string] tuples to evict.
-      @request_key_ring = Array.new(REQUEST_KEY_CAPACITY)
+      @request_key_ring = Array.new(RubyRoutes::Constant::REQUEST_KEY_CAPACITY)
       # @!visibility private
       @ring_index  = 0
       # @!visibility private
@@ -45,8 +41,10 @@ module RubyRoutes
         # @param request_path [String]
         # @return [String] frozen canonical key
         def fetch_request_key(http_method, request_path)
-          if (path_map = @request_key_pool[http_method])
-            if (composite_key = path_map[request_path])
+          method_key = http_method.frozen? ? http_method : http_method.dup.freeze
+          path_key   = request_path.frozen? ? request_path : request_path.dup.freeze
+          if (path_map = @request_key_pool[method_key])
+            if (composite_key = path_map[path_key])
               return composite_key
             end
           end
@@ -55,10 +53,10 @@ module RubyRoutes
           if path_map
             path_map[request_path] = composite_key
           else
-            @request_key_pool[http_method] = { request_path => composite_key }
+            @request_key_pool[method_key] = { path_key => composite_key }
           end
 
-          if @entry_count < REQUEST_KEY_CAPACITY
+          if @entry_count < RubyRoutes::Constant::REQUEST_KEY_CAPACITY
             @request_key_ring[@entry_count] = [http_method, request_path]
             @entry_count += 1
           else
@@ -69,7 +67,7 @@ module RubyRoutes
             end
             @request_key_ring[@ring_index] = [http_method, request_path]
             @ring_index += 1
-            @ring_index = 0 if @ring_index == REQUEST_KEY_CAPACITY
+            @ring_index = 0 if @ring_index == RubyRoutes::Constant::REQUEST_KEY_CAPACITY
           end
 
           composite_key
