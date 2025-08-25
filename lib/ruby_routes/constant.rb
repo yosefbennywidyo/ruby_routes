@@ -25,6 +25,8 @@ module RubyRoutes
   #
   # @api internal
   module Constant
+    # Shared, canonical root path constant (single source of truth).
+    ROOT_PATH = '/'.freeze
     # Maps a segment's first byte (ASCII) to a Segment class.
     #
     # Keys:
@@ -81,6 +83,22 @@ module RubyRoutes
       58 => ->(s) { { type: :param,  name: s[1..-1].freeze } },              # ':'
       :default => ->(s) { { type: :static, value: s.freeze } }
     }.freeze
+
+    # Regex for unreserved characters (RFC 3986 subset).
+    UNRESERVED_RE     = /\A[a-zA-Z0-9\-._~]+\z/.freeze
+    QUERY_CACHE_SIZE  = 128
+    HTTP_GET          = 'GET'.freeze
+    HTTP_POST         = 'POST'.freeze
+    HTTP_PUT          = 'PUT'.freeze
+    HTTP_PATCH        = 'PATCH'.freeze
+    HTTP_DELETE       = 'DELETE'.freeze
+    HTTP_HEAD         = 'HEAD'.freeze
+    HTTP_OPTIONS      = 'OPTIONS'.freeze
+
+    EMPTY_ARRAY  = [].freeze
+    EMPTY_PAIR   = [EMPTY_ARRAY, EMPTY_ARRAY].freeze
+    EMPTY_STRING = ''.freeze
+    EMPTY_HASH   = {}.freeze
 
     # Build a descriptor Hash for a raw segment string.
     #
