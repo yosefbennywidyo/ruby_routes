@@ -74,7 +74,7 @@ module RubyRoutes
       base_name   = name.to_s
       plural_path  = RubyRoutes::Utility::InflectorUtility.pluralize(options[:path] || base_name)
       singular     = RubyRoutes::Utility::InflectorUtility.singularize(base_name)
-      plural      = (options[:path] || name.to_s.pluralize)
+      plural      = (options[:path] || RubyRoutes::Utility::InflectorUtility.pluralize(name))
       controller  = options[:controller] || plural
 
       # Collection
@@ -92,7 +92,7 @@ module RubyRoutes
       # Simple nested resource support
       if options[:nested]
         nested_name     = options[:nested]
-        nested_plural   = nested_name.to_s.pluralize
+        nested_plural   = RubyRoutes::Utility::InflectorUtility.pluralize(nested_name)
 
         get   "/#{plural}/:id/#{nested_plural}",                      options.merge(to: "#{nested_plural}#index")
         get   "/#{plural}/:id/#{nested_plural}/new",                  options.merge(to: "#{nested_plural}#new")
@@ -121,13 +121,13 @@ module RubyRoutes
     def resource(name, options = {})
       singular    = RubyRoutes::Utility::InflectorUtility.singularize(name.to_s)
       controller  = options[:controller] || singular
-      get    "/#{singular}",       options.merge(to: "#{singular}#show")
-      get    "/#{singular}/new",   options.merge(to: "#{singular}#new")
-      post   "/#{singular}",       options.merge(to: "#{singular}#create")
-      get    "/#{singular}/edit",  options.merge(to: "#{singular}#edit")
-      put    "/#{singular}",       options.merge(to: "#{singular}#update")
-      patch  "/#{singular}",       options.merge(to: "#{singular}#update")
-      delete "/#{singular}",       options.merge(to: "#{singular}#destroy")
+      get    "/#{singular}",       options.merge(to: "#{controller}#show")
+      get    "/#{singular}/new",   options.merge(to: "#{controller}#new")
+      post   "/#{singular}",       options.merge(to: "#{controller}#create")
+      get    "/#{singular}/edit",  options.merge(to: "#{controller}#edit")
+      put    "/#{singular}",       options.merge(to: "#{controller}#update")
+      patch  "/#{singular}",       options.merge(to: "#{controller}#update")
+      delete "/#{singular}",       options.merge(to: "#{controller}#destroy")
     end
 
     # ------------------------------------------------------------------
