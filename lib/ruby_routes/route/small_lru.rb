@@ -30,7 +30,9 @@ module RubyRoutes
 
       # @param max_size [Integer] maximum number of entries to retain
       def initialize(max_size = 1024)
-        @max_size      = max_size
+        max = Integer(max_size)
+        raise ArgumentError, "max_size must be >= 1" if max < 1
+        @max_size      = max
         @hash          = {}   # internal ordered storage
         @hits          = 0
         @misses        = 0
