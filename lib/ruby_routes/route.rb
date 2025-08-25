@@ -4,6 +4,7 @@ require 'uri'
 require 'timeout'
 require 'set'
 require 'rack'
+require_relative 'constant'
 require_relative 'route/small_lru'
 require_relative 'utility/path_utility'
 require_relative 'utility/key_builder_utility'
@@ -43,12 +44,6 @@ module RubyRoutes
     include RubyRoutes::Utility::MethodUtility
 
     attr_reader :path, :methods, :controller, :action, :name, :constraints, :defaults
-
-    # Reusable empty constants to avoid allocation churn.
-    EMPTY_ARRAY  = [].freeze
-    EMPTY_PAIR   = [EMPTY_ARRAY, EMPTY_ARRAY].freeze
-    EMPTY_STRING = ''.freeze
-    EMPTY_HASH   = {}.freeze
 
     # Create a new Route.
     #
@@ -99,7 +94,7 @@ module RubyRoutes
     # @return [Hash] frozen defaults merged in; NOT frozen (mutable for caller)
     def extract_params(request_path, parsed_qp = nil)
       path_params = extract_path_params_fast(request_path)
-      return EMPTY_HASH unless path_params
+      return RubyRoutes::Constant::EMPTY_HASH unless path_params
       build_params_hash(path_params, request_path, parsed_qp)
     end
 
@@ -139,14 +134,13 @@ module RubyRoutes
     def generate_path(params = {})
       if params.nil? || params.empty?
         return @static_path if @static_path
-        params = EMPTY_HASH
+        params = RubyRoutes::Constant::EMPTY_HASH
       end
 
-      unless @validated_required_ok
+      unless @required_params.empty?
         missing, nils = validate_required_params(params)
         raise RouteNotFound, "Missing params: #{missing.join(', ')}" unless missing.empty?
         raise RouteNotFound, "Missing or nil params: #{nils.join(', ')}" unless nils.empty?
-        @validated_required_ok = true
       end
 
       merged = build_merged_params(params)
@@ -172,28 +166,15 @@ module RubyRoutes
     # @return [Hash]
     def build_merged_params(params)
       return @defaults if params.nil? || params.empty?
-
-      object_id_key = params.object_id
-      cached_slot = @merged_cache_slots.find { |(slot_id, _)| slot_id == object_id_key }
-      return cached_slot[1] if cached_slot
-
-      merged = get_thread_local_merged_hash
-      @defaults.each { |key, value| merged[key] = value }
+      hash = Thread.current[:ruby_routes_merge_hash] ||= {}
+      hash.clear
+      @defaults.each { |key, value| hash[key] = value }
       params.each do |key, value|
         next if value.nil?
         key_string = key.is_a?(String) ? key : key.to_s
-        merged[key_string] = value
+        hash[key_string] = value
       end
-
-      if @merged_cache_slots[0][0].nil?
-        @merged_cache_slots[0] = [object_id_key, merged.dup]
-      elsif @merged_cache_slots[1][0].nil?
-        @merged_cache_slots[1] = [object_id_key, merged.dup]
-      else
-        @merged_cache_slots[0] = @merged_cache_slots[1]
-        @merged_cache_slots[1] = [object_id_key, merged.dup]
-      end
-      merged
+      hash
     end
     private :build_merged_params
 
@@ -255,7 +236,7 @@ module RubyRoutes
     def precompile_route_data
       @is_resource = @path.match?(/\/:id(?:$|\.)/)
       @gen_cache   = SmallLru.new(512)
-      @query_cache = SmallLru.new(QUERY_CACHE_SIZE)
+      @query_cache = SmallLru.new(RubyRoutes::Constant::QUERY_CACHE_SIZE)
       initialize_validation_cache
       compile_segments
       compile_required_params
@@ -267,8 +248,8 @@ module RubyRoutes
     # @return [void]
     def compile_segments
       @compiled_segments =
-        if @path == ROOT_PATH
-          EMPTY_ARRAY
+        if @path == RubyRoutes::Constant::ROOT_PATH
+          RubyRoutes::Constant::EMPTY_ARRAY
         else
           @path.split('/').reject(&:empty?).map { |seg| RubyRoutes::Constant.segment_descriptor(seg) }.freeze
         end
@@ -286,14 +267,15 @@ module RubyRoutes
 
     # Precompute static path if no dynamic parts.
     def check_static_path
-      @static_path = generate_static_path if @required_params.empty?
+      return unless @compiled_segments.all? { |seg| seg[:type] == :static }
+      @static_path = generate_static_path
     end
 
     # Build static path.
     #
     # @return [String]
     def generate_static_path
-      return ROOT_PATH if @compiled_segments.empty?
+      return RubyRoutes::Constant::ROOT_PATH if @compiled_segments.empty?
       parts = @compiled_segments.map { |segment| segment[:value] }
       "/#{parts.join('/')}"
     end
@@ -351,7 +333,7 @@ module RubyRoutes
     # @param request_path [String]
     # @return [Hash, nil] nil when mismatch
     def extract_path_params_fast(request_path)
-      return EMPTY_HASH if @compiled_segments.empty? && request_path == ROOT_PATH
+      return RubyRoutes::Constant::EMPTY_HASH if @compiled_segments.empty? && request_path == RubyRoutes::Constant::ROOT_PATH
       return nil if @compiled_segments.empty?
 
       path_parts = split_path(request_path)
@@ -385,29 +367,12 @@ module RubyRoutes
       extracted
     end
 
-    # (Deprecated older variant retained elsewhere) – duplicate name note:
-    # This second definition shadows the earlier documented version.
-    # Prefer the earlier documented variant; this remains for backward
-    # compatibility only.
-    def build_merged_params(params) # rubocop:disable Lint/DuplicateMethods
-      return @defaults if params.nil? || params.empty?
-      hash = Thread.current[:ruby_routes_merge_hash] ||= {}
-      hash.clear
-      @defaults.each { |key, value| hash[key] = value }
-      params.each do |key, value|
-        next if value.nil?
-        key_string = key.is_a?(String) ? key : key.to_s
-        hash[key_string] = value
-      end
-      hash
-    end
-
     # Construct a generated path string from merged params.
     #
     # @param merged [Hash]
     # @return [String]
     def generate_path_string(merged)
-      return ROOT_PATH if @compiled_segments.empty?
+      return RubyRoutes::Constant::ROOT_PATH if @compiled_segments.empty?
 
       estimation = 1
       @compiled_segments.each do |segment|
@@ -459,7 +424,7 @@ module RubyRoutes
     # @param segment_string [String]
     # @return [String]
     def encode_segment_fast(segment_string)
-      return segment_string if UNRESERVED_RE.match?(segment_string)
+      return segment_string if RubyRoutes::Constant::UNRESERVED_RE.match?(segment_string)
       @encoding_cache ||= {}
       @encoding_cache[segment_string] ||= URI.encode_www_form_component(segment_string).gsub('+', '%20')
     end
@@ -470,9 +435,9 @@ module RubyRoutes
     # @return [Hash]
     def query_params_fast(path)
       index = path.index('?')
-      return EMPTY_HASH unless index
+      return RubyRoutes::Constant::EMPTY_HASH unless index
       query_string = path[(index + 1)..-1]
-      return EMPTY_HASH if query_string.empty? || query_string.match?(/^\?+$/)
+      return RubyRoutes::Constant::EMPTY_HASH if query_string.empty? || query_string.match?(/^\?+$/)
       if (cached = @query_cache.get(query_string))
         return cached
       end
@@ -506,7 +471,7 @@ module RubyRoutes
     # @param params [Hash]
     # @return [Array<(Array,String)>]
     def validate_required_params(params)
-      return EMPTY_PAIR if @required_params.empty?
+      return RubyRoutes::Constant::EMPTY_PAIR if @required_params.empty?
       missing_keys   = nil
       nil_value_keys = nil
       @required_params.each do |required_key|
@@ -518,7 +483,7 @@ module RubyRoutes
           (missing_keys ||= []) << required_key
         end
       end
-      [missing_keys || EMPTY_ARRAY, nil_value_keys || EMPTY_ARRAY]
+      [missing_keys || RubyRoutes::Constant::EMPTY_ARRAY, nil_value_keys || RubyRoutes::Constant::EMPTY_ARRAY]
     end
 
     # Initialize validation result cache.
@@ -550,22 +515,22 @@ module RubyRoutes
     # Detect param structure type (used for potential future optimizations).
     #
     # @param params [Object]
-    # @return [Symbol] :string_keyed_hash, :symbol_keyed_hash, :hash, :enumerable, :mehod_missing
+    # @return [Symbol] :string_keyed_hash, :symbol_keyed_hash, :hash, :enumerable, :other
     def params_type(params)
       @params_type_cache ||= {}
-      oid = params.object_id
-      return @params_type_cache[oid] if @params_type_cache.key?(oid)
+      object_id = params.object_id
+      return @params_type_cache[object_id] if @params_type_cache.key?(object_id)
 
       type = if params.is_a?(Hash)
         refine_hash_type(params)
       elsif params.respond_to?(:each) && params.respond_to?(:[])
         :enumerable
       else
-        :mehod_missing
+        :other
       end
 
       @params_type_cache.clear if @params_type_cache.size > 100
-      @params_type_cache[oid] = type
+      @params_type_cache[object_id] = type
     end
 
     # Sample keys to classify hash kind.
@@ -695,17 +660,5 @@ module RubyRoutes
     def normalize_method(method)
       normalize_http_method(method)
     end
-
-    # Regex for unreserved characters (RFC 3986 subset).
-    UNRESERVED_RE     = /\A[a-zA-Z0-9\-._~]+\z/.freeze
-    ROOT_PATH         = '/'.freeze
-    QUERY_CACHE_SIZE  = 128
-    HTTP_GET          = 'GET'.freeze
-    HTTP_POST         = 'POST'.freeze
-    HTTP_PUT          = 'PUT'.freeze
-    HTTP_PATCH        = 'PATCH'.freeze
-    HTTP_DELETE       = 'DELETE'.freeze
-    HTTP_HEAD         = 'HEAD'.freeze
-    HTTP_OPTIONS      = 'OPTIONS'.freeze
   end
  end
