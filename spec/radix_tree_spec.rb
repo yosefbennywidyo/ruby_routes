@@ -235,9 +235,9 @@ RSpec.describe RubyRoutes::RadixTree do
       route = double('route')
       tree.add('/path/:id', ['GET'], route)
       (1..3000).each { |i| tree.find("/path/#{i}", 'GET') }
-      cache = tree.instance_variable_get(:@split_cache)
+      cache     = tree.instance_variable_get(:@split_cache)
       cache_max = tree.instance_variable_get(:@split_cache_max)
-      expect(cache.size).to be <= cache_max
+      expect(cache.max_size).to be <= cache_max
     end
   end
 
