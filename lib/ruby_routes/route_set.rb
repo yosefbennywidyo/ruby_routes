@@ -31,6 +31,10 @@ module RubyRoutes
       @cache_hits           = 0
       @cache_misses         = 0
       @radix_tree           = RadixTree.new
+      @request_key_pool     = {}
+      @request_key_ring     = Array.new(RubyRoutes::Constant::REQUEST_KEY_CAPACITY)
+      @entry_count          = 0
+      @ring_index           = 0
     end
 
     # Add a route object to internal structures.
@@ -44,6 +48,13 @@ module RubyRoutes
       route_obj
     end
     alias_method :add_route, :add_to_collection
+
+    # Register a newly created Route (called from RouteUtility#define).
+    def register(route)
+      (@routes ||= []) << route
+      # Keep any named route index logic here if applicable
+      route
+    end
 
     # Find any route (no params) for a method/path.
     #
@@ -145,6 +156,10 @@ module RubyRoutes
       @cache_hits = 0
       @cache_misses = 0
       @radix_tree = RadixTree.new
+      @request_key_pool.clear
+      @request_key_ring.fill(nil)
+      @entry_count = 0
+      @ring_index = 0
     end
 
     # @return [Integer] number of routes
@@ -235,6 +250,48 @@ module RubyRoutes
       params.clear
       thread_pool = Thread.current[:ruby_routes_params_pool] ||= []
       thread_pool << params if thread_pool.size < 10 # Limit pool size
+    end
+
+    # Internal: fetch (or build) a composite request cache key with ring-buffer eviction.
+    # Ensures consistent use of frozen method/path keys to avoid mixed key space bugs.
+    def fetch_request_key(http_method, request_path)
+      # Normalize & freeze once
+      method_key = http_method.is_a?(String) ? http_method.upcase.freeze : http_method.to_s.upcase.freeze
+      path_key   = request_path.is_a?(String) ? request_path.freeze : request_path.to_s.freeze
+
+      # Fast hit
+      if (path_map = @request_key_pool[method_key])
+        if (existing = path_map[path_key])
+          return existing
+        end
+      end
+
+      # Build composite from frozen normalized keys ONLY (avoid original mutable inputs)
+      composite_key = "#{method_key}:#{path_key}".freeze
+
+      if path_map
+        path_map[path_key] = composite_key
+      else
+        @request_key_pool[method_key] = { path_key => composite_key }
+      end
+
+      # Ring buffer insert / eviction uses the SAME frozen keys
+      if @entry_count < RubyRoutes::Constant::REQUEST_KEY_CAPACITY
+        @request_key_ring[@entry_count] = [method_key, path_key]
+        @entry_count += 1
+      else
+        evict_method, evict_path = @request_key_ring[@ring_index]
+        if (evict_bucket = @request_key_pool[evict_method])
+          if evict_bucket.delete(evict_path) && evict_bucket.empty?
+            @request_key_pool.delete(evict_method)
+          end
+        end
+        @request_key_ring[@ring_index] = [method_key, path_key]
+        @ring_index += 1
+        @ring_index = 0 if @ring_index == RubyRoutes::Constant::REQUEST_KEY_CAPACITY
+      end
+
+      composite_key
     end
   end
 end
