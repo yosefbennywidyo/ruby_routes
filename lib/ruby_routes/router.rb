@@ -1,4 +1,7 @@
 # frozen_string_literal: true
+
+require_relative 'utility/inflector_utility'
+require_relative 'utility/route_utility'
 # Public DSL entrypoint for defining application routes.
 #
 # Typical usage:
@@ -60,6 +63,25 @@ module RubyRoutes
       @scope_stack = []
       @concerns    = {}
       instance_eval(&block) if block_given?
+    end
+
+    # One‑shot immutable build (DSL executed immediately).
+    def self.build(&block)
+      new(&block).finalize!
+    end
+
+    # Return frozen router (idempotent).
+    def finalize!
+      return self if @frozen
+      @frozen = true
+      @route_set.freeze if @route_set.respond_to?(:freeze)
+      @scope_stack.freeze
+      @concerns.freeze
+      self
+    end
+
+    def frozen?
+      !!@frozen
     end
 
     # ---- HTTP Verb Helpers -------------------------------------------------
@@ -290,7 +312,7 @@ module RubyRoutes
     # Apply scope stack to (path, options).
     # @api private
     def apply_scope(path, options)
-      scoped_options = options.dup
+      scoped_options = options
       scoped_path    = path
 
       @scope_stack.reverse_each do |scope|
@@ -324,6 +346,10 @@ module RubyRoutes
       dup[:via] = via_sym if needs_via
       dup[:to]  = to_string if needs_to
       dup
+    end
+
+    def ensure_unfrozen!
+      raise "Router finalized (immutable)" if @frozen
     end
   end
 end
