@@ -2,6 +2,7 @@
 
 require_relative 'segment'
 require_relative 'utility/path_utility'
+require_relative 'node'
 
 module RubyRoutes
   # RadixTree
@@ -21,6 +22,7 @@ module RubyRoutes
   # @api internal
   class RadixTree
     include RubyRoutes::Utility::PathUtility
+    include RubyRoutes::Utility::MethodUtility
 
     class << self
       # Convenience factory: RadixTree.new(path, opts) returns a Route.
@@ -54,7 +56,7 @@ module RubyRoutes
     # @return [Object] handler
     def add(path, methods, handler)
       normalized_path = normalize_path(path)
-      upcased_methods = methods.map { |m| (m.is_a?(String) && m == m.upcase) ? m : m.to_s.upcase }
+      upcased_methods = methods.map { |method| normalize_http_method(method) }
       insert_route(normalized_path, upcased_methods, handler)
       handler
     end
