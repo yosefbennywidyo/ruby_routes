@@ -16,9 +16,18 @@ module RubyRoutes
     #
     # @api internal
     class WildcardSegment < BaseSegment
+      # Correctly derive parameter name for wildcard splats.
+      #
+      # "*photos"  -> "photos"
+      # "*"        -> "splat"   (previous code produced "" and never fell back)
+      #
+      # Also ensures @raw_text is assigned by delegating to BaseSegment#initialize.
       # @param raw_segment_text [String] raw token (e.g. "*path" or "*")
       def initialize(raw_segment_text)
-        @param_name = (raw_segment_text[1..-1] || 'splat')
+        super(raw_segment_text)
+        tail = raw_segment_text && raw_segment_text[1..-1]
+        tail = nil if tail == '' # treat empty substring as absent
+        @param_name = (tail || 'splat')
       end
 
       # Ensure a wildcard child node on +parent_node+ and assign param name.
