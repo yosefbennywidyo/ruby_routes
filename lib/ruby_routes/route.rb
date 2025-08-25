@@ -191,7 +191,7 @@ module RubyRoutes
     # @param merged [Hash]
     # @return [String]
     def build_param_cache_key(merged)
-      raw_key = param_cache_key_reuse(@required_params, merged)
+      raw_key = cache_key_for_params(@required_params, merged)
       hash_val = raw_key.hash
       if @param_key_slots[0][0] == hash_val
         return @param_key_slots[0][1]
