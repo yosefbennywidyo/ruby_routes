@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative 'route/small_lru'
 require_relative 'segment'
 require_relative 'utility/path_utility'
 require_relative 'utility/method_utility'
@@ -48,9 +49,9 @@ module RubyRoutes
     # Initialize empty tree and split cache.
     def initialize
       @root_node          = Node.new
-      @split_cache        = {}
-      @split_cache_order  = []
+      @split_cache        = RubyRoutes::Route::SmallLru.new(2048)
       @split_cache_max    = 2048
+      @split_cache_order  = []
       @empty_segment_list = [].freeze
     end
 
@@ -151,7 +152,7 @@ module RubyRoutes
 
         if current_node.is_endpoint && current_node.handlers[normalized_method]
           best_match_node   = current_node
-          best_match_params = captured_params.dup
+          best_match_params = captured_params
         end
 
         break if stop_traversal
@@ -189,21 +190,11 @@ module RubyRoutes
     def split_path_cached(raw_path)
       return @empty_segment_list if raw_path == '/'
 
-      if @split_cache.key?(raw_path)
-        @split_cache_order.delete(raw_path)
-        @split_cache_order << raw_path
-        return @split_cache[raw_path]
-      end
+      cached = @split_cache.get(raw_path)
+      return cached if cached
 
       segments = split_path(raw_path)
-
-      if @split_cache.size >= @split_cache_max
-        evicted_key = @split_cache_order.shift
-        @split_cache.delete(evicted_key)
-      end
-
-      @split_cache[raw_path] = segments
-      @split_cache_order << raw_path
+      @split_cache.set(raw_path, segments)
       segments
     end
 
@@ -215,7 +206,7 @@ module RubyRoutes
     def check_constraints(route_handler, captured_params)
       return true unless route_handler.respond_to?(:validate_constraints_fast!)
       # Use a duplicate to avoid unintended mutation by validators.
-      route_handler.validate_constraints_fast!(captured_params.dup)
+      route_handler.validate_constraints_fast!(captured_params)
       true
     rescue RubyRoutes::ConstraintViolation
       false
