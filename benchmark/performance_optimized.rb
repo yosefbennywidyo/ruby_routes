@@ -76,26 +76,19 @@ def print_object_counts(before_counts = nil)
   counts
 end
 
-# Hoisted HTTP method constants to avoid per‑iteration upcasing in hot loops
-HTTP_GET     = 'GET'.freeze
-HTTP_POST    = 'POST'.freeze
-HTTP_PUT     = 'PUT'.freeze
-HTTP_PATCH   = 'PATCH'.freeze
-HTTP_DELETE  = 'DELETE'.freeze
-
 # Test paths for benchmarking
 test_paths = [
-  [HTTP_GET, '/'],
-  [HTTP_GET, '/users'],
-  [HTTP_GET, '/users/123'],
-  [HTTP_POST, '/users'],
-  [HTTP_GET, '/users/123/posts'],
-  [HTTP_GET, '/admin/users'],
-  [HTTP_GET, '/api/v1/users'],
-  [HTTP_GET, '/api/v2/posts/456'],
-  [HTTP_GET, '/products/789'],
-  [HTTP_GET, '/users/test@example.com'],
-  [HTTP_GET, '/posts/my-awesome-post']
+  [RubyRoutes::Constant::HTTP_GET, '/'],
+  [RubyRoutes::Constant::HTTP_GET, '/users'],
+  [RubyRoutes::Constant::HTTP_GET, '/users/123'],
+  [RubyRoutes::Constant::HTTP_POST, '/users'],
+  [RubyRoutes::Constant::HTTP_GET, '/users/123/posts'],
+  [RubyRoutes::Constant::HTTP_GET, '/admin/users'],
+  [RubyRoutes::Constant::HTTP_GET, '/api/v1/users'],
+  [RubyRoutes::Constant::HTTP_GET, '/api/v2/posts/456'],
+  [RubyRoutes::Constant::HTTP_GET, '/products/789'],
+  [RubyRoutes::Constant::HTTP_GET, '/users/test@example.com'],
+  [RubyRoutes::Constant::HTTP_GET, '/posts/my-awesome-post']
 ]
 
 # Warm up the cache
