@@ -37,6 +37,7 @@ module RubyRoutes
 
       # ---- DSL Recording -------------------------------------------------
       RubyRoutes::Constant::RECORDED_METHODS.each do |method_name|
+        next if %i[build initialize recorded_calls].include?(method_name)
         define_method(method_name) do |*arguments, &definition_block|
           @recorded_calls << [method_name, arguments, definition_block]
           nil
@@ -47,10 +48,21 @@ module RubyRoutes
       #
       # @return [RubyRoutes::Router] finalized router
       def build
-        router = Router.new
+        router  = Router.new
+        allowlist = RubyRoutes::Constant::RECORDED_METHODS
+
         recorded_calls.each do |(method_name, arguments, definition_block)|
-          router.public_send(method_name, *arguments, &definition_block)
+          # Security: only allow predefined DSL methods (prevents arbitrary method execution)
+          unless allowlist.include?(method_name)
+            raise ArgumentError, "Disallowed DSL method: #{method_name.inspect}"
+          end
+
+          # (Optional) shallow dup args to avoid later mutation side‑effects
+          safe_args = arguments.map { |a| a.is_a?(String) || a.is_a?(Numeric) || a.is_a?(Symbol) ? a : a.dup rescue a }
+
+          router.public_send(method_name, *safe_args, &definition_block)
         end
+
         router.finalize!
         router
       end
