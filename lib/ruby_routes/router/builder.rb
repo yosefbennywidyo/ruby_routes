@@ -43,19 +43,22 @@ module RubyRoutes
         end
       end
 
-      # Replay recorded calls on a fresh Router, finalize, return it.
-      #
-      # @return [RubyRoutes::Router] finalized router
       def build
         router = Router.new
 
         # Define allowlist of permitted methods (use the constant)
         allowed_methods = RubyRoutes::Constant::RECORDED_METHODS
 
-        recorded_calls.each do |(method_name, arguments, definition_block)|
-          raise ArgumentError, "Invalid router method: #{method_name.inspect}" unless allowed_methods.include?(method_name)
+        calls = @recorded_calls.dup
+
+        calls.each do |(method_name, arguments, definition_block)|
+          unless method_name.is_a?(Symbol) && allowed_methods.include?(method_name)
+            raise ArgumentError, "Invalid router method: #{method_name.inspect}"
+          end
+
+          raise NoMethodError, "Router does not implement: #{method_name}" unless router.respond_to?(method_name, true)
         end
-        router.finalize!
+        router.freeze
         router
       end
     end
