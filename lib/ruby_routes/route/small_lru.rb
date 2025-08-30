@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+
 #
 # RubyRoutes::Route::SmallLru
 #
@@ -32,9 +33,10 @@ module RubyRoutes
       # @raise [ArgumentError] if max_size < 1
       def initialize(max_size = 1024)
         max = Integer(max_size)
-        raise ArgumentError, "max_size must be >= 1" if max < 1
+        raise ArgumentError, 'max_size must be >= 1' if max < 1
+
         @max_size  = max
-        @hash      = {}                # { key => value } (insertion order = LRU order)
+        @hash      = {} # { key => value } (insertion order = LRU order)
         @hits      = 0
         @misses    = 0
         @evictions = 0
