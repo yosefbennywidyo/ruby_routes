@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative 'segment'
 
 module RubyRoutes
@@ -53,35 +55,41 @@ module RubyRoutes
       @handlers[normalize_method(method)]
     end
 
-    # Traverse to the most specific child for a single path segment.
+    NO_TRAVERSAL_RESULT = [nil, false].freeze
+
+    # Traverses from this node using a single path segment.
+    # Returns [next_node_or_nil, stop_traversal(Boolean)].
     #
-    # Order:
-    # 1. static child (exact match)
-    # 2. dynamic child (capture single segment)
-    # 3. wildcard child (capture remaining segments; halts traversal)
-    #
-    # @param segment [String] current path component
-    # @param index [Integer] index of this segment in full list
-    # @param segments [Array<String>] full path segments
-    # @param params [Hash, nil] hash to populate with captures
-    # @return [Array<(Node,nil),(Boolean)>] [next_node_or_nil, stop_traversal]
+    # Optimized + simplified to satisfy RuboCop metrics (cyclomatic / perceived complexity, length).
     def traverse_for(segment, index, segments, params)
-      if @static_children.key?(segment)
-        return [@static_children[segment], false]
-      elsif @dynamic_child
-        params[@dynamic_child.param_name] = segment if params && @dynamic_child.param_name
-        return [@dynamic_child, false]
-      elsif @wildcard_child
-        if params && @wildcard_child.param_name
-          remaining_segments = segments[index..-1]
-          params[@wildcard_child.param_name] = remaining_segments.join('/')
-        end
-        return [@wildcard_child, true]
+      if (child = @static_children[segment])
+        return [child, false]
       end
-      [nil, false]
+
+      if (dyn = @dynamic_child)
+        capture_dynamic_param(params, dyn, segment)
+        return [dyn, false]
+      end
+
+      if (wc = @wildcard_child)
+        capture_wildcard_param(params, wc, segments, index)
+        return [wc, true]
+      end
+
+      NO_TRAVERSAL_RESULT
     end
 
     private
+
+    def capture_dynamic_param(params, dyn_node, value)
+      return unless params && dyn_node.param_name
+      params[dyn_node.param_name] = value
+    end
+
+    def capture_wildcard_param(params, wc_node, segments, index)
+      return unless params && wc_node.param_name
+      params[wc_node.param_name] = segments[index..].join('/')
+    end
 
     # Normalize HTTP method to uppercase String (fast path).
     #
