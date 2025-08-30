@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'spec_helper'
 
 RSpec.describe RubyRoutes::Route::SmallLru do
@@ -124,7 +126,7 @@ RSpec.describe RubyRoutes::Route::SmallLru do
       lru.set('d', 4)
 
       hash = lru.instance_variable_get(:@hash)
-      expect(hash.keys).to eq(['c', 'a', 'd'])
+      expect(hash.keys).to eq(%w[c a d])
       expect(hash.keys).not_to include('b')
     end
 

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'spec_helper'
 
 RSpec.describe RubyRoutes::Node do
@@ -80,7 +82,7 @@ RSpec.describe RubyRoutes::Node do
 
   describe '#traverse_for' do
     it 'returns nil when no children exist' do
-      segments = ['users', '123']
+      segments = %w[users 123]
       params = {}
 
       result, should_break = node.traverse_for('users', 0, segments, params)
@@ -95,7 +97,7 @@ RSpec.describe RubyRoutes::Node do
       static_child = RubyRoutes::Node.new
       node.instance_variable_set(:@static_children, { 'users' => static_child })
 
-      segments = ['users', '123']
+      segments = %w[users 123]
       params = {}
 
       result, should_break = node.traverse_for('users', 0, segments, params)
@@ -111,7 +113,7 @@ RSpec.describe RubyRoutes::Node do
       dynamic_child.param_name = 'id'
       node.instance_variable_set(:@dynamic_child, dynamic_child)
 
-      segments = ['users', '123']
+      segments = %w[users 123]
       params = {}
 
       result, should_break = node.traverse_for('123', 0, segments, params)
@@ -162,7 +164,7 @@ RSpec.describe RubyRoutes::Node do
       node.instance_variable_set(:@static_children, { 'new' => static_child })
       node.instance_variable_set(:@dynamic_child, dynamic_child)
 
-      segments = ['users', 'new']
+      segments = %w[users new]
       params = {}
 
       result, should_break = node.traverse_for('new', 1, segments, params)
@@ -179,7 +181,7 @@ RSpec.describe RubyRoutes::Node do
       dynamic_child.param_name = 'id'
       node.instance_variable_set(:@dynamic_child, dynamic_child)
 
-      segments = ['users', '123']
+      segments = %w[users 123]
 
       result, should_break = node.traverse_for('123', 0, segments, nil)
 

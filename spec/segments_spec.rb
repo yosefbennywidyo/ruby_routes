@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'spec_helper'
 
 RSpec.describe 'Segment Classes' do
@@ -10,12 +12,12 @@ RSpec.describe 'Segment Classes' do
 
   describe '#match' do
     it 'returns the child node when text matches' do
-      result, _ = segment.match(node, 'foo', 0, [], {})
+      result, = segment.match(node, 'foo', 0, [], {})
       expect(result).to eq(node.static_children['foo'])
     end
 
     it 'returns nil when text does not match' do
-      result, _ = segment.match(node, 'bar', 0, [], {})
+      result, = segment.match(node, 'bar', 0, [], {})
       expect(result).to be_nil
     end
 
@@ -191,17 +193,17 @@ RSpec.describe 'Segment Classes' do
     describe '#ensure_child' do
       it 'raises NotImplementedError' do
         parent = RubyRoutes::Node.new
-        expect {
+        expect do
           segment.ensure_child(parent)
-        }.to raise_error(NotImplementedError)
+        end.to raise_error(NotImplementedError)
       end
     end
 
     describe '#match' do
       it 'raises NotImplementedError' do
-        expect {
+        expect do
           segment.match(nil, nil, nil, nil, nil)
-        }.to raise_error(NotImplementedError)
+        end.to raise_error(NotImplementedError)
       end
     end
   end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'spec_helper'
 
 RSpec.describe RubyRoutes::RadixTree do
@@ -20,18 +22,21 @@ RSpec.describe RubyRoutes::RadixTree do
       constraints_hash.each do |key, rule|
         value = params[key.to_s] || params[key]
         next unless value
+
         case rule
         when Regexp
           raise RubyRoutes::ConstraintViolation unless rule.match?(value.to_s)
         when :int
           raise RubyRoutes::ConstraintViolation unless value.to_s.match?(/\A\d+\z/)
         when :uuid
-          raise RubyRoutes::ConstraintViolation unless value.to_s.match?(/\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z/i)
-        when Hash
-          if (range = rule[:range]).is_a?(Range)
-            raise RubyRoutes::ConstraintViolation unless range.include?(value.to_i)
+          unless value.to_s.match?(/\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z/i)
+            raise RubyRoutes::ConstraintViolation
           end
-        # Unknown symbol constraints pass (RadixTree treats as success)
+        when Hash
+          if (range = rule[:range]).is_a?(Range) && !range.include?(value.to_i)
+            raise RubyRoutes::ConstraintViolation
+          end
+          # Unknown symbol constraints pass (RadixTree treats as success)
         end
       end
       true
@@ -44,15 +49,15 @@ RSpec.describe RubyRoutes::RadixTree do
     it 'adds routes to the tree' do
       route = double('route')
       tree.add('/users', ['GET'], route)
-      result, _ = tree.find('/users', 'GET')
+      result, = tree.find('/users', 'GET')
       expect(result).to eq(route)
     end
 
     it 'handles multiple HTTP methods' do
       route = double('route')
       tree.add('/users', %w[GET POST], route)
-      get_result, _ = tree.find('/users', 'GET')
-      post_result, _ = tree.find('/users', 'POST')
+      get_result, = tree.find('/users', 'GET')
+      post_result, = tree.find('/users', 'POST')
       expect(get_result).to eq(route)
       expect(post_result).to eq(route)
     end
@@ -76,28 +81,28 @@ RSpec.describe RubyRoutes::RadixTree do
 
   describe '#find' do
     it 'returns nil for non-matching paths' do
-      result, _ = tree.find('/nonexistent', 'GET')
+      result, = tree.find('/nonexistent', 'GET')
       expect(result).to be_nil
     end
 
     it 'returns nil for wrong HTTP method' do
       route = double('route')
       tree.add('/users', ['GET'], route)
-      result, _ = tree.find('/users', 'POST')
+      result, = tree.find('/users', 'POST')
       expect(result).to be_nil
     end
 
     it 'handles root path' do
       route = double('route')
       tree.add('/', ['GET'], route)
-      result, _ = tree.find('/', 'GET')
+      result, = tree.find('/', 'GET')
       expect(result).to eq(route)
     end
 
     it 'handles empty path as root' do
       route = double('route')
       tree.add('/', ['GET'], route)
-      result, _ = tree.find('', 'GET')
+      result, = tree.find('', 'GET')
       expect(result).to eq(route)
     end
 
@@ -116,10 +121,10 @@ RSpec.describe RubyRoutes::RadixTree do
       route = build_route_with_constraints(id: /\d+/)
       tree.add('/users/:id', ['GET'], route)
 
-      result, _ = tree.find('/users/123', 'GET', { 'id' => '123' })
+      result, = tree.find('/users/123', 'GET', { 'id' => '123' })
       expect(result).to eq(route)
 
-      result, _ = tree.find('/users/abc', 'GET', { 'id' => 'abc' })
+      result, = tree.find('/users/abc', 'GET', { 'id' => 'abc' })
       expect(result).to be_nil
     end
 
@@ -127,11 +132,11 @@ RSpec.describe RubyRoutes::RadixTree do
       route = build_route_with_constraints(id: { range: 101..999 })
       tree.add('/users/:id', ['GET'], route)
 
-      result, _ = tree.find('/users/123', 'GET', { 'id' => '123' })
+      result, = tree.find('/users/123', 'GET', { 'id' => '123' })
       expect(result).to eq(route)
-      result, _ = tree.find('/users/500', 'GET', { 'id' => '500' })
+      result, = tree.find('/users/500', 'GET', { 'id' => '500' })
       expect(result).to eq(route)
-      result, _ = tree.find('/users/50', 'GET', { 'id' => '50' })
+      result, = tree.find('/users/50', 'GET', { 'id' => '50' })
       expect(result).to be_nil
     end
 
@@ -139,9 +144,9 @@ RSpec.describe RubyRoutes::RadixTree do
       route = build_route_with_constraints(id: :int)
       tree.add('/users/:id', ['GET'], route)
 
-      result, _ = tree.find('/users/123', 'GET', { 'id' => '123' })
+      result, = tree.find('/users/123', 'GET', { 'id' => '123' })
       expect(result).to eq(route)
-      result, _ = tree.find('/users/abc', 'GET', { 'id' => 'abc' })
+      result, = tree.find('/users/abc', 'GET', { 'id' => 'abc' })
       expect(result).to be_nil
     end
 
@@ -150,9 +155,9 @@ RSpec.describe RubyRoutes::RadixTree do
       tree.add('/users/:id', ['GET'], route)
       uuid = '550e8400-e29b-41d4-a716-446655440000'
 
-      result, _ = tree.find("/users/#{uuid}", 'GET', { 'id' => uuid })
+      result, = tree.find("/users/#{uuid}", 'GET', { 'id' => uuid })
       expect(result).to eq(route)
-      result, _ = tree.find('/users/not-a-uuid', 'GET', { 'id' => 'not-a-uuid' })
+      result, = tree.find('/users/not-a-uuid', 'GET', { 'id' => 'not-a-uuid' })
       expect(result).to be_nil
     end
 
@@ -160,9 +165,9 @@ RSpec.describe RubyRoutes::RadixTree do
       route = build_route_with_constraints(year: /\d{4}/, month: /\d{1,2}/)
       tree.add('/posts/:year/:month', ['GET'], route)
 
-      result, _ = tree.find('/posts/2023/12', 'GET', { 'year' => '2023', 'month' => '12' })
+      result, = tree.find('/posts/2023/12', 'GET', { 'year' => '2023', 'month' => '12' })
       expect(result).to eq(route)
-      result, _ = tree.find('/posts/23/12', 'GET', { 'year' => '23', 'month' => '12' })
+      result, = tree.find('/posts/23/12', 'GET', { 'year' => '23', 'month' => '12' })
       expect(result).to be_nil
     end
 
@@ -170,9 +175,9 @@ RSpec.describe RubyRoutes::RadixTree do
       route = build_route_with_constraints(id: /\d+/)
       tree.add('/users/:id', ['GET'], route)
 
-      result, _ = tree.find('/users/123', 'GET', { 'id' => '123' })
+      result, = tree.find('/users/123', 'GET', { 'id' => '123' })
       expect(result).to eq(route)
-      result, _ = tree.find('/users/123', 'GET', { id: '123' })
+      result, = tree.find('/users/123', 'GET', { id: '123' })
       expect(result).to eq(route)
     end
 
@@ -181,7 +186,7 @@ RSpec.describe RubyRoutes::RadixTree do
       allow(route).to receive(:respond_to?).with(:constraints).and_return(true)
       allow(route).to receive(:respond_to?).with(:validate_constraints_fast!).and_return(false)
       tree.add('/users/:id', ['GET'], route)
-      result, _ = tree.find('/users/123', 'GET')
+      result, = tree.find('/users/123', 'GET')
       expect(result).to eq(route)
     end
 
@@ -190,14 +195,14 @@ RSpec.describe RubyRoutes::RadixTree do
       allow(route).to receive(:respond_to?).with(:constraints).and_return(false)
       allow(route).to receive(:respond_to?).with(:validate_constraints_fast!).and_return(false)
       tree.add('/users/:id', ['GET'], route)
-      result, _ = tree.find('/users/123', 'GET')
+      result, = tree.find('/users/123', 'GET')
       expect(result).to eq(route)
     end
 
     it 'handles unknown symbolic constraints gracefully (passes)' do
       route = build_route_with_constraints(id: :unknown_constraint)
       tree.add('/users/:id', ['GET'], route)
-      result, _ = tree.find('/users/123', 'GET', { 'id' => '123' })
+      result, = tree.find('/users/123', 'GET', { 'id' => '123' })
       expect(result).to eq(route)
     end
   end
@@ -216,9 +221,9 @@ RSpec.describe RubyRoutes::RadixTree do
     it 'handles root path efficiently' do
       route = double('route')
       tree.add('/', ['GET'], route)
-      result, _ = tree.find('/', 'GET')
+      result, = tree.find('/', 'GET')
       expect(result).to eq(route)
-      result, _ = tree.find('', 'GET')
+      result, = tree.find('', 'GET')
       expect(result).to eq(route)
     end
 
@@ -237,7 +242,7 @@ RSpec.describe RubyRoutes::RadixTree do
       (1..3000).each { |i| tree.find("/path/#{i}", 'GET') }
       cache     = tree.instance_variable_get(:@split_cache)
       cache_max = tree.instance_variable_get(:@split_cache_max)
-      expect(cache.max_size).to be <= cache_max
+      expect(cache.size).to be <= cache_max
     end
   end
 
