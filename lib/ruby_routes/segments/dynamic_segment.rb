@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module RubyRoutes
   module Segments
     # DynamicSegment
@@ -21,7 +23,7 @@ module RubyRoutes
     class DynamicSegment < BaseSegment
       # @param raw_segment_text [String] raw token (e.g. ":id")
       def initialize(raw_segment_text)
-        @param_name = raw_segment_text[1..-1]
+        @param_name = raw_segment_text[1..]
       end
 
       # Ensure a dynamic child node under +parent_node+ and assign the
@@ -46,6 +48,7 @@ module RubyRoutes
       # @return [Array<(Object, Boolean)>] [next_node, stop_traversal=false]
       def match(current_node, incoming_segment_text, _segment_index, _all_segments, captured_params)
         return [nil, false] unless current_node.dynamic_child
+
         dynamic_child_node = current_node.dynamic_child
         captured_params[dynamic_child_node.param_name.to_s] = incoming_segment_text if captured_params
         [dynamic_child_node, false]

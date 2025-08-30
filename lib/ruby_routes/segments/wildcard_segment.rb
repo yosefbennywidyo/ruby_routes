@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module RubyRoutes
   module Segments
     # WildcardSegment
@@ -25,9 +27,9 @@ module RubyRoutes
       # @param raw_segment_text [String] raw token (e.g. "*path" or "*")
       def initialize(raw_segment_text)
         super(raw_segment_text)
-        tail = raw_segment_text && raw_segment_text[1..-1]
+        tail = raw_segment_text && raw_segment_text[1..]
         tail = nil if tail == '' # treat empty substring as absent
-        @param_name = (tail || 'splat')
+        @param_name = tail || 'splat'
       end
 
       # Ensure a wildcard child node on +parent_node+ and assign param name.
@@ -56,9 +58,10 @@ module RubyRoutes
       # @return [Array<(Object, Boolean)>] [wildcard_child_node_or_nil, stop_traversal_flag]
       def match(current_node, _unused_literal, segment_index, all_path_segments, captured_params)
         return [nil, false] unless current_node.wildcard_child
+
         wildcard_child_node = current_node.wildcard_child
         if captured_params
-          remaining_path = all_path_segments[segment_index..-1].join('/')
+          remaining_path = all_path_segments[segment_index..].join('/')
           captured_params[wildcard_child_node.param_name.to_s] = remaining_path
         end
         [wildcard_child_node, true]
