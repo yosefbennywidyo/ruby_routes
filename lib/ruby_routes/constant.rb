@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative 'segments/base_segment'
 require_relative 'segments/dynamic_segment'
 require_relative 'segments/static_segment'
@@ -26,7 +28,7 @@ module RubyRoutes
   # @api internal
   module Constant
     # Shared, canonical root path constant (single source of truth).
-    ROOT_PATH = '/'.freeze
+    ROOT_PATH = '/'
     # Maps a segment's first byte (ASCII) to a Segment class.
     #
     # Keys:
@@ -49,6 +51,7 @@ module RubyRoutes
 
       dynamic: lambda do |node, segment, _idx, _segments, params|
         return nil unless node.dynamic_child
+
         next_node = node.dynamic_child
         params[next_node.param_name.to_s] = segment if params && next_node.param_name
         [next_node, false]
@@ -56,13 +59,14 @@ module RubyRoutes
 
       wildcard: lambda do |node, _segment, idx, segments, params|
         return nil unless node.wildcard_child
+
         next_node = node.wildcard_child
-        params[next_node.param_name.to_s] = segments[idx..-1].join('/') if params && next_node.param_name
+        params[next_node.param_name.to_s] = segments[idx..].join('/') if params && next_node.param_name
         [next_node, true]
       end,
 
       # Default → no match
-      default: lambda { |_node, _segment, _idx, _segments, _params| nil }
+      default: ->(_node, _segment, _idx, _segments, _params) { nil }
     }.freeze
 
     # Singleton instances to avoid per-cache strategy allocations.
@@ -76,28 +80,28 @@ module RubyRoutes
     # - type: :static | :param | :splat
     # - value (for static) or name (for dynamic/splat)
     DESCRIPTOR_FACTORIES = {
-      42 => ->(s) {
-        name = s[1..-1]
+      42 => lambda { |s|
+        name = s[1..]
         { type: :splat, name: (name.nil? || name.empty? ? 'splat' : name).freeze }
       }, # '*'
-      58 => ->(s) { { type: :param,  name: s[1..-1].freeze } },              # ':'
+      58 => ->(s) { { type: :param, name: s[1..].freeze } }, # ':'
       :default => ->(s) { { type: :static, value: s.freeze } }
     }.freeze
 
     # Regex for unreserved characters (RFC 3986 subset).
-    UNRESERVED_RE     = /\A[a-zA-Z0-9\-._~]+\z/.freeze
+    UNRESERVED_RE     = /\A[a-zA-Z0-9\-._~]+\z/
     QUERY_CACHE_SIZE  = 128
-    HTTP_GET          = 'GET'.freeze
-    HTTP_POST         = 'POST'.freeze
-    HTTP_PUT          = 'PUT'.freeze
-    HTTP_PATCH        = 'PATCH'.freeze
-    HTTP_DELETE       = 'DELETE'.freeze
-    HTTP_HEAD         = 'HEAD'.freeze
-    HTTP_OPTIONS      = 'OPTIONS'.freeze
+    HTTP_GET          = 'GET'
+    HTTP_POST         = 'POST'
+    HTTP_PUT          = 'PUT'
+    HTTP_PATCH        = 'PATCH'
+    HTTP_DELETE       = 'DELETE'
+    HTTP_HEAD         = 'HEAD'
+    HTTP_OPTIONS      = 'OPTIONS'
 
     EMPTY_ARRAY  = [].freeze
     EMPTY_PAIR   = [EMPTY_ARRAY, EMPTY_ARRAY].freeze
-    EMPTY_STRING = ''.freeze
+    EMPTY_STRING = ''
     EMPTY_HASH   = {}.freeze
 
     # Maximum number of distinct (method,path) composite keys retained
