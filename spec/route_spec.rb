@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'spec_helper'
 
 RSpec.describe RubyRoutes::Route do
@@ -22,8 +24,8 @@ RSpec.describe RubyRoutes::Route do
       route = RubyRoutes::RadixTree.new('/users', via: :post, to: 'users#create')
       expect(route.methods).to eq(['POST'])
 
-      route = RubyRoutes::RadixTree.new('/users', via: [:get, :post], to: 'users#handle')
-      expect(route.methods).to eq(['GET', 'POST'])
+      route = RubyRoutes::RadixTree.new('/users', via: %i[get post], to: 'users#handle')
+      expect(route.methods).to eq(%w[GET POST])
     end
 
     it 'extracts action from controller#action format' do
@@ -46,12 +48,12 @@ RSpec.describe RubyRoutes::Route do
     end
   end
 
-  let(:route) { described_class.new('/users/:id', to: 'users#show', via: [:get, :head]) }
+  let(:route) { described_class.new('/users/:id', to: 'users#show', via: %i[get head]) }
 
   describe '#query_params' do
     it 'returns query params as a hash' do
       params = route.query_params('/users/123?foo=bar&baz=qux')
-      expect(params).to eq({'foo' => 'bar', 'baz' => 'qux'})
+      expect(params).to eq({ 'foo' => 'bar', 'baz' => 'qux' })
     end
 
     it 'returns empty hash if no query string' do
@@ -60,8 +62,8 @@ RSpec.describe RubyRoutes::Route do
     end
   end
 
-  describe "#query_params_fast" do
-    it "returns empty hash for empty query string" do
+  describe '#query_params_fast' do
+    it 'returns empty hash for empty query string' do
       route = RubyRoutes::Route.new('/users/:id', to: 'users#show')
 
       # Test with an empty query string (question mark with nothing after it)
@@ -76,7 +78,7 @@ RSpec.describe RubyRoutes::Route do
       expect(result).to eq({})
     end
 
-    it "uses query cache for repeated queries" do
+    it 'uses query cache for repeated queries' do
       route = RubyRoutes::Route.new('/users', to: 'users#index')
 
       # Mock the SmallLru cache methods
@@ -84,32 +86,32 @@ RSpec.describe RubyRoutes::Route do
       allow(route).to receive(:instance_variable_get).with(:@query_cache).and_return(query_cache)
 
       # First call - cache miss
-      allow(query_cache).to receive(:get).with("name=john&age=30").and_return(nil)
+      allow(query_cache).to receive(:get).with('name=john&age=30').and_return(nil)
       allow(query_cache).to receive(:set)
-      allow(Rack::Utils).to receive(:parse_query).and_return({"name" => "john", "age" => "30"})
+      allow(Rack::Utils).to receive(:parse_query).and_return({ 'name' => 'john', 'age' => '30' })
 
-      result1 = route.send(:query_params_fast, "/users?name=john&age=30")
-      expect(result1).to eq({"name" => "john", "age" => "30"})
+      result1 = route.send(:query_params_fast, '/users?name=john&age=30')
+      expect(result1).to eq({ 'name' => 'john', 'age' => '30' })
       expect(Rack::Utils).to have_received(:parse_query)
 
       # Second call - cache hit
-      allow(query_cache).to receive(:get).with("name=john&age=30").and_return({"name" => "john", "age" => "30"})
-      allow(Rack::Utils).to receive(:parse_query).and_raise("Should not be called")
+      allow(query_cache).to receive(:get).with('name=john&age=30').and_return({ 'name' => 'john', 'age' => '30' })
+      allow(Rack::Utils).to receive(:parse_query).and_raise('Should not be called')
 
-      result2 = route.send(:query_params_fast, "/users?name=john&age=30")
-      expect(result2).to eq({"name" => "john", "age" => "30"})
+      result2 = route.send(:query_params_fast, '/users?name=john&age=30')
+      expect(result2).to eq({ 'name' => 'john', 'age' => '30' })
     end
 
-    it "uses cached query params on repeated calls" do
+    it 'uses cached query params on repeated calls' do
       route = RubyRoutes::Route.new('/users', to: 'users#index')
 
       # First call populates cache
-      first_result = route.send(:query_params_fast, "/users?name=john")
+      first_result = route.send(:query_params_fast, '/users?name=john')
 
       # Second call should use cache
       # Fix: Stub the module directly, not with allow_any_instance_of
-      allow(Rack::Utils).to receive(:parse_query).and_raise("Should use cache")
-      second_result = route.send(:query_params_fast, "/users?name=john")
+      allow(Rack::Utils).to receive(:parse_query).and_raise('Should use cache')
+      second_result = route.send(:query_params_fast, '/users?name=john')
 
       expect(second_result).to eq(first_result)
     end
@@ -117,18 +119,18 @@ RSpec.describe RubyRoutes::Route do
 
   describe '#normalize_method' do
     it 'returns HEAD for :head symbol' do
-      expect(route.send(:normalize_method, :head)).to eq('HEAD')
+      expect(route.send(:normalize_http_method, :head)).to eq('HEAD')
     end
 
     it 'returns uppercase string for string input' do
-      expect(route.send(:normalize_method, 'post')).to eq('POST')
+      expect(route.send(:normalize_http_method, 'post')).to eq('POST')
     end
   end
 
   describe '#build_params_hash' do
     it 'merges parsed_qp into result' do
-      path_params = {'id' => '42'}
-      parsed_qp = {'foo' => 'bar'}
+      path_params = { 'id' => '42' }
+      parsed_qp = { 'foo' => 'bar' }
       result = route.send(:build_params_hash, path_params, '/users/42?foo=bar', parsed_qp)
       expect(result['id']).to eq('42')
       expect(result['foo']).to eq('bar')
@@ -171,7 +173,7 @@ RSpec.describe RubyRoutes::Route do
     end
 
     it 'matches with multiple HTTP methods' do
-      route = RubyRoutes::RadixTree.new('/users/:id', via: [:get, :put], to: 'users#show')
+      route = RubyRoutes::RadixTree.new('/users/:id', via: %i[get put], to: 'users#show')
       expect(route.match?('GET', '/users/123')).to be true
       expect(route.match?('PUT', '/users/123')).to be true
       expect(route.match?('POST', '/users/123')).to be false
@@ -268,7 +270,7 @@ RSpec.describe RubyRoutes::Route do
 
   describe 'method normalization' do
     it 'normalizes HTTP methods to uppercase' do
-      route = RubyRoutes::RadixTree.new('/users', via: [:get, :post], to: 'users#index')
+      route = RubyRoutes::RadixTree.new('/users', via: %i[get post], to: 'users#index')
 
       expect(route.methods).to include('GET')
       expect(route.methods).to include('POST')
@@ -324,17 +326,17 @@ RSpec.describe RubyRoutes::Route do
     it 'raises error for missing required parameters' do
       route = RubyRoutes::RadixTree.new('/users/:id', to: 'users#show', as: :user)
 
-      expect {
+      expect do
         route.generate_path
-      }.to raise_error(RubyRoutes::RouteNotFound, /Missing params: id/)
+      end.to raise_error(RubyRoutes::RouteNotFound, /Missing params: id/)
     end
 
     it 'raises error for nil required parameters' do
       route = RubyRoutes::RadixTree.new('/users/:id', to: 'users#show', as: :user)
 
-      expect {
+      expect do
         route.generate_path(id: nil)
-      }.to raise_error(RubyRoutes::RouteNotFound, /Missing or nil params: id/)
+      end.to raise_error(RubyRoutes::RouteNotFound, /Missing or nil params: id/)
     end
 
     it 'caches generated paths for performance' do
@@ -413,7 +415,7 @@ RSpec.describe RubyRoutes::Route do
 
     it 'rejects wildcard routes with insufficient path segments' do
       route = RubyRoutes::RadixTree.new('/files/static/*path', to: 'files#show')
-      params = route.extract_params('/files')  # Missing 'static' and wildcard parts
+      params = route.extract_params('/files') # Missing 'static' and wildcard parts
 
       # extract_params returns EMPTY_HASH when extract_path_params_fast returns nil
       expect(params).to eq({})
@@ -450,21 +452,21 @@ RSpec.describe RubyRoutes::Route do
 
   describe 'route validation' do
     it 'raises error for invalid route without controller or action' do
-      expect {
+      expect do
         RubyRoutes::RadixTree.new('/invalid', {})
-      }.to raise_error(RubyRoutes::InvalidRoute)
+      end.to raise_error(RubyRoutes::InvalidRoute)
     end
 
     it 'accepts route with controller option' do
-      expect {
+      expect do
         RubyRoutes::RadixTree.new('/valid', controller: 'pages', action: 'show')
-      }.not_to raise_error
+      end.not_to raise_error
     end
 
     it 'accepts route with to option' do
-      expect {
+      expect do
         RubyRoutes::RadixTree.new('/valid', to: 'pages#show')
-      }.not_to raise_error
+      end.not_to raise_error
     end
   end
 
@@ -478,7 +480,7 @@ RSpec.describe RubyRoutes::Route do
     end
 
     it 'uses frozen method sets for fast lookup' do
-      route = RubyRoutes::RadixTree.new('/users', via: [:get, :post], to: 'users#index')
+      route = RubyRoutes::RadixTree.new('/users', via: %i[get post], to: 'users#index')
       methods_set = route.instance_variable_get(:@methods_set)
 
       expect(methods_set).to be_frozen
@@ -498,8 +500,8 @@ RSpec.describe RubyRoutes::Route do
   end
 
   # Test for line 279: fallback for older Ruby versions without transform_keys
-  describe "params without transform_keys" do
-    it "handles params without transform_keys method" do
+  describe 'params without transform_keys' do
+    it 'handles params without transform_keys method' do
       route = RubyRoutes::Route.new('/users/:id', to: 'users#show')
 
       # Create an object that behaves like a hash but doesn't have transform_keys
@@ -510,16 +512,12 @@ RSpec.describe RubyRoutes::Route do
 
       # Define method_missing to handle calls to key? and []
       def params.method_missing(method, *args)
-        if method == :key? || method == :has_key?
+        if %i[key? has_key?].include?(method)
           key = args.first
           key.to_s == 'id' || key.to_sym == :id
         elsif method == :[]
           key = args.first
-          if key.to_s == 'id' || key.to_sym == :id
-            '123'
-          else
-            nil
-          end
+          '123' if key.to_s == 'id' || key.to_sym == :id
         else
           super
         end
@@ -539,8 +537,8 @@ RSpec.describe RubyRoutes::Route do
   end
 
   # Test for line 317-319: handling splat segments in path generation
-  describe "splat segments in path generation" do
-    it "handles splat segments with different value types" do
+  describe 'splat segments in path generation' do
+    it 'handles splat segments with different value types' do
       route = RubyRoutes::Route.new('/files/*path', to: 'files#show')
 
       # With string value
@@ -555,8 +553,8 @@ RSpec.describe RubyRoutes::Route do
   end
 
   # Test for line 344-345: segment encoding with caching
-  describe "segment encoding cache" do
-    it "caches encoded segments" do
+  describe 'segment encoding cache' do
+    it 'caches encoded segments' do
       route = RubyRoutes::Route.new('/users/:name', to: 'users#show')
 
       # Generate path with a value that needs encoding
@@ -572,8 +570,8 @@ RSpec.describe RubyRoutes::Route do
   end
 
   # Test for line 358: handling empty query strings
-  describe "query parameter handling" do
-    it "returns empty hash for empty query strings" do
+  describe 'query parameter handling' do
+    it 'returns empty hash for empty query strings' do
       route = RubyRoutes::Route.new('/users', to: 'users#index')
 
       # Test with empty query string
@@ -587,165 +585,165 @@ RSpec.describe RubyRoutes::Route do
   end
 
   # Test for the format_splat_value method
-  describe "#format_splat_value" do
+  describe '#format_splat_value' do
     let(:route) { RubyRoutes::Route.new('/test', to: 'test#index') }
 
-    it "formats string values by splitting and encoding segments" do
+    it 'formats string values by splitting and encoding segments' do
       # Use send to access private method
-      result = route.send(:format_splat_value, "docs/report name.pdf")
+      result = route.send(:format_splat_value, 'docs/report name.pdf')
       expect(result).to eq('docs/report%20name.pdf')
     end
 
-    it "formats array values by encoding each element" do
-      result = route.send(:format_splat_value, ["docs", "report name.pdf"])
+    it 'formats array values by encoding each element' do
+      result = route.send(:format_splat_value, ['docs', 'report name.pdf'])
       expect(result).to eq('docs/report%20name.pdf')
     end
 
-    it "formats non-string/non-array values by converting to string" do
-      result = route.send(:format_splat_value, 12345)
+    it 'formats non-string/non-array values by converting to string' do
+      result = route.send(:format_splat_value, 12_345)
       expect(result).to eq('12345')
     end
   end
 
-  describe "#encode_segment_fast" do
-    it "initializes and uses encoding cache" do
+  describe '#encode_segment_fast' do
+    it 'initializes and uses encoding cache' do
       route = RubyRoutes::Route.new('/users/:name', to: 'users#show')
 
       # First, verify cache doesn't exist yet
       expect(route.instance_variable_get(:@encoding_cache)).to be_nil
 
       # Call the method which should initialize the cache
-      route.send(:encode_segment_fast, "John Doe")
+      route.send(:encode_segment_fast, 'John Doe')
 
       # Verify cache was created
       cache = route.instance_variable_get(:@encoding_cache)
       expect(cache).to be_a(Hash)
-      expect(cache).to include("John Doe" => "John%20Doe")
+      expect(cache).to include('John Doe' => 'John%20Doe')
 
       # Call again with same value - should use cache
-      allow(URI).to receive(:encode_www_form_component).and_raise("Should not be called")
-      result2 = route.send(:encode_segment_fast, "John Doe")
+      allow(URI).to receive(:encode_www_form_component).and_raise('Should not be called')
+      result2 = route.send(:encode_segment_fast, 'John Doe')
 
       # Verify result is the same and URI.encode wasn't called
-      expect(result2).to eq("John%20Doe")
+      expect(result2).to eq('John%20Doe')
     end
 
-    it "initializes encoding cache on first use" do
+    it 'initializes encoding cache on first use' do
       route = RubyRoutes::Route.new('/users/:name', to: 'users#show')
       route.instance_variable_set(:@encoding_cache, nil) # Reset cache
 
       # Use a string that needs encoding (contains space or special chars)
-      route.send(:encode_segment_fast, "test with space")
+      route.send(:encode_segment_fast, 'test with space')
 
       expect(route.instance_variable_get(:@encoding_cache)).to be_a(Hash)
     end
   end
 
-  describe "#validate_constraints_fast!" do
-    context "with :int constraint" do
+  describe '#validate_constraints_fast!' do
+    context 'with :int constraint' do
       let(:route) { RubyRoutes::Route.new('/users/:id', to: 'users#show', constraints: { id: :int }) }
 
-      it "accepts valid integer values" do
-        params = { "id" => "123" }
+      it 'accepts valid integer values' do
+        params = { 'id' => '123' }
         expect { route.send(:validate_constraints_fast!, params) }.not_to raise_error
       end
 
-      it "rejects non-integer values" do
-        params = { "id" => "abc" }
+      it 'rejects non-integer values' do
+        params = { 'id' => 'abc' }
         expect { route.send(:validate_constraints_fast!, params) }.to raise_error(RubyRoutes::ConstraintViolation)
       end
 
-      it "rejects partial integer values" do
-        params = { "id" => "123abc" }
+      it 'rejects partial integer values' do
+        params = { 'id' => '123abc' }
         expect { route.send(:validate_constraints_fast!, params) }.to raise_error(RubyRoutes::ConstraintViolation)
       end
 
-      it "handles empty values" do
-        params = { "id" => "" }
+      it 'handles empty values' do
+        params = { 'id' => '' }
         expect { route.send(:validate_constraints_fast!, params) }.to raise_error(RubyRoutes::ConstraintViolation)
       end
     end
   end
 
-  it "validates integer constraints" do
+  it 'validates integer constraints' do
     route = RubyRoutes::Route.new('/users/:id', to: 'users#show', constraints: { id: :int })
 
     # Valid integer
-    expect { route.send(:validate_constraints_fast!, {"id" => "123"}) }.not_to raise_error
+    expect { route.send(:validate_constraints_fast!, { 'id' => '123' }) }.not_to raise_error
 
     # Invalid integer
-    expect { route.send(:validate_constraints_fast!, {"id" => "abc"}) }.to raise_error(RubyRoutes::ConstraintViolation)
+    expect { route.send(:validate_constraints_fast!, { 'id' => 'abc' }) }.to raise_error(RubyRoutes::ConstraintViolation)
   end
 
-  describe "Private method test coverage" do
-    describe "#join_path_parts" do
+  describe 'Private method test coverage' do
+    describe '#join_path_parts' do
       let(:route) { RubyRoutes::Route.new('/test', to: 'test#index') }
 
-      it "joins array elements with slashes" do
-        result = route.send(:join_path_parts, ['users', '123', 'posts'])
+      it 'joins array elements with slashes' do
+        result = route.send(:join_path_parts, %w[users 123 posts])
         expect(result).to eq('/users/123/posts')
       end
 
-      it "handles empty array" do
+      it 'handles empty array' do
         result = route.send(:join_path_parts, [])
         expect(result).to eq('/')
       end
 
-      it "handles array with single element" do
+      it 'handles array with single element' do
         result = route.send(:join_path_parts, ['users'])
         expect(result).to eq('/users')
       end
 
-      it "handles elements with special characters" do
+      it 'handles elements with special characters' do
         result = route.send(:join_path_parts, ['user files', 'report.pdf'])
         expect(result).to eq('/user files/report.pdf')
       end
     end
 
-    describe "#validate_required_params" do
-      it "returns empty arrays for empty required params" do
+    describe '#validate_required_params' do
+      it 'returns empty arrays for empty required params' do
         route = RubyRoutes::Route.new('/about', to: 'pages#about')
         # Force empty required params for testing
         route.instance_variable_set(:@required_params, [])
 
-        missing, nil_params = route.send(:validate_required_params, {id: '123'})
+        missing, nil_params = route.send(:validate_required_params, { id: '123' })
         expect(missing).to eq([])
         expect(nil_params).to eq([])
       end
 
-      it "correctly identifies missing params" do
+      it 'correctly identifies missing params' do
         route = RubyRoutes::Route.new('/users/:id', to: 'users#show')
         # @required_params should contain 'id'
 
-        missing, nil_params = route.send(:validate_required_params, {name: 'John'})
+        missing, nil_params = route.send(:validate_required_params, { name: 'John' })
         expect(missing).to include('id')
         expect(nil_params).to be_empty
       end
 
-      it "correctly identifies nil params" do
+      it 'correctly identifies nil params' do
         route = RubyRoutes::Route.new('/users/:id', to: 'users#show')
 
-        missing, nil_params = route.send(:validate_required_params, {id: nil})
+        missing, nil_params = route.send(:validate_required_params, { id: nil })
         expect(missing).to be_empty
         expect(nil_params).to include('id')
       end
 
-      it "handles params with mixed string and symbol keys" do
+      it 'handles params with mixed string and symbol keys' do
         route = RubyRoutes::Route.new('/users/:id/posts/:post_id', to: 'posts#show')
 
         # Mix of string and symbol keys
-        missing, nil_params = route.send(:validate_required_params, {'id' => '123', post_id: '456'})
+        missing, nil_params = route.send(:validate_required_params, { 'id' => '123', post_id: '456' })
         expect(missing).to be_empty
         expect(nil_params).to be_empty
       end
     end
 
-    describe "validation caching" do
+    describe 'validation caching' do
       let(:route) { RubyRoutes::Route.new('/users/:id', to: 'users#show') }
 
-      it "caches validation results for frozen params" do
+      it 'caches validation results for frozen params' do
         # Create a frozen params hash
-        params = {id: '123'}.freeze
+        params = { id: '123' }.freeze
         result = double('validation_result')
 
         # Access private validation cache
@@ -753,7 +751,7 @@ RSpec.describe RubyRoutes::Route do
         expect(validation_cache).not_to be_nil
 
         # Cache should be empty initially
-        expect(validation_cache.instance_variable_get(:@h)).to be_empty
+        expect(validation_cache.instance_variable_get(:@hash)).to be_empty
 
         # Cache a result
         route.send(:cache_validation_result, params, result)
@@ -765,7 +763,7 @@ RSpec.describe RubyRoutes::Route do
 
       it "doesn't cache validation results for non-frozen params" do
         # Create a non-frozen params hash
-        params = {id: '123'}
+        params = { id: '123' }
         result = double('validation_result')
 
         # Cache a result
@@ -776,11 +774,11 @@ RSpec.describe RubyRoutes::Route do
         expect(cached_result).to be_nil
       end
 
-      it "returns nil for get_cached_validation when validation cache is nil" do
+      it 'returns nil for get_cached_validation when validation cache is nil' do
         # Force nil validation cache
         route.instance_variable_set(:@validation_cache, nil)
 
-        params = {id: '123'}.freeze
+        params = { id: '123' }.freeze
         result = route.send(:get_cached_validation, params)
         expect(result).to be_nil
       end

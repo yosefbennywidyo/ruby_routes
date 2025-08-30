@@ -1,10 +1,12 @@
+# frozen_string_literal: true
+
 require 'spec_helper'
 require 'benchmark'
 
 RSpec.describe 'Performance Optimizations' do
   let(:router) do
     RubyRoutes.draw do
-      resources :users  # This creates named routes like :user, :users, :edit_user, etc.
+      resources :users # This creates named routes like :user, :users, :edit_user, etc.
       resources :posts
       resources :comments
 
@@ -39,7 +41,7 @@ RSpec.describe 'Performance Optimizations' do
       end
 
       # Should complete 5000 route matches in reasonable time
-      expect(time).to be < 0.5  # Less than 500ms for 5000 matches
+      expect(time).to be < 0.5 # Less than 500ms for 5000 matches
     end
 
     it 'maintains high cache hit rate' do
@@ -76,20 +78,14 @@ RSpec.describe 'Performance Optimizations' do
 
       time = Benchmark.realtime do
         1000.times do
-          if available_routes.include?(:user)
-            router.route_set.generate_path(:user, id: '123')
-          end
-          if available_routes.include?(:users)
-            router.route_set.generate_path(:users)
-          end
-          if available_routes.include?(:posts)
-            router.route_set.generate_path(:posts)
-          end
+          router.route_set.generate_path(:user, id: '123') if available_routes.include?(:user)
+          router.route_set.generate_path(:users) if available_routes.include?(:users)
+          router.route_set.generate_path(:posts) if available_routes.include?(:posts)
         end
       end
 
       # Should complete path generations in reasonable time
-      expect(time).to be < 0.5  # Less than 500ms
+      expect(time).to be < 0.5 # Less than 500ms
     end
   end
 
@@ -112,7 +108,7 @@ RSpec.describe 'Performance Optimizations' do
 
       # Should not have excessive string object growth
       string_growth = final_objects - initial_objects
-      expect(string_growth).to be < 10000  # Allow reasonable growth for 3000 operations
+      expect(string_growth).to be < 10_000 # Allow reasonable growth for 3000 operations
     end
   end
 
@@ -121,7 +117,7 @@ RSpec.describe 'Performance Optimizations' do
       route = RubyRoutes::RadixTree.new('/test', to: 'test#index', via: :get)
 
       # Should use the same object for GET method
-      expect(route.methods.first).to equal(RubyRoutes::Route::HTTP_GET)
+      expect(route.methods.first).to equal(RubyRoutes::Constant::HTTP_GET)
     end
 
     it 'freezes static segment values for memory efficiency' do
@@ -147,7 +143,7 @@ RSpec.describe 'Performance Optimizations' do
       end
 
       # Should generate 1000 cache keys very quickly
-      expect(time).to be < 0.01  # Less than 10ms
+      expect(time).to be < 0.01 # Less than 10ms
     end
   end
 end

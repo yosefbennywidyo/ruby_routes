@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'spec_helper'
 
 RSpec.describe RubyRoutes::RouteSet do
@@ -299,8 +301,8 @@ RSpec.describe RubyRoutes::RouteSet do
       recognition_cache = route_set.instance_variable_get(:@recognition_cache)
       expect(recognition_cache.size).to be <= small_max
 
-      expect(recognition_cache.key?("GET:/users/0")).to be false
-      expect(recognition_cache.key?("GET:/users/1")).to be false
+      expect(recognition_cache.key?('GET:/users/0')).to be false
+      expect(recognition_cache.key?('GET:/users/1')).to be false
     end
   end
 
