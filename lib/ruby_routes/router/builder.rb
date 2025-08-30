@@ -53,12 +53,7 @@ module RubyRoutes
         allowed_methods = RubyRoutes::Constant::RECORDED_METHODS
 
         recorded_calls.each do |(method_name, arguments, definition_block)|
-          if method_name.is_a?(Symbol) && allowed_methods.include?(method_name)
-            router.public_send(method_name, arguments, definition_block)
-          else
-            # Either not a Symbol or not in our allowlist - reject with clear error
-            raise ArgumentError, "Invalid router method: #{method_name.inspect}"
-          end
+          raise ArgumentError, "Invalid router method: #{method_name.inspect}" unless allowed_methods.include?(method_name)
         end
         router.finalize!
         router
