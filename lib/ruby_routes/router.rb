@@ -90,15 +90,15 @@ module RubyRoutes
     # Define a GET route.
     # @param path [String]
     # @param options [Hash] :to, :controller/:action, :constraints, :defaults, :via (ignored if provided)
-    def get(path, options = {}) = add_route(path, build_route_options(options, :get))
+    def get(path, options = {});    add_route(path, build_route_options(options, :get));    self; end
     # Define a POST route.
-    def post(path, options = {}) = add_route(path, build_route_options(options, :post))
+    def post(path, options = {});   add_route(path, build_route_options(options, :post));   self; end
     # Define a PUT route.
-    def put(path, options = {}) = add_route(path, build_route_options(options, :put))
+    def put(path, options = {});    add_route(path, build_route_options(options, :put));    self; end
     # Define a PATCH route.
-    def patch(path, options = {}) = add_route(path, build_route_options(options, :patch))
+    def patch(path, options = {});  add_route(path, build_route_options(options, :patch));  self; end
     # Define a DELETE route.
-    def delete(path, options = {}) = add_route(path, build_route_options(options, :delete))
+    def delete(path, options = {}); add_route(path, build_route_options(options, :delete)); self; end
 
     # Generic multi‑verb matcher.
     # Caller must supply :via => symbol or array of symbols.
