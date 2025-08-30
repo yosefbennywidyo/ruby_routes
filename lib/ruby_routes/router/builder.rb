@@ -38,7 +38,7 @@ module RubyRoutes
       # ---- DSL Recording -------------------------------------------------
       RubyRoutes::Constant::RECORDED_METHODS.each do |method_name|
         define_method(method_name) do |*arguments, &definition_block|
-          @recorded_calls << [method_name, arguments, definition_block]
+          @recorded_calls << [__method__, arguments, definition_block]
           nil
         end
       end
@@ -59,6 +59,7 @@ module RubyRoutes
           raise NoMethodError, "Router does not implement: #{method_name}" unless router.respond_to?(method_name, true)
         end
         router.freeze
+        router.finalize!
         router
       end
     end
