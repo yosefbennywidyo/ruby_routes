@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative 'segments/base_segment'
 require_relative 'segments/dynamic_segment'
 require_relative 'segments/static_segment'

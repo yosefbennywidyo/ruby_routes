@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'cgi'
 
 module RubyRoutes
@@ -52,7 +54,7 @@ module RubyRoutes
       def add_url_helper(name, route)
         url_helpers.define_method(name) do |*args|
           params = args.first || {}
-            route_set.generate_path_from_route(route, params)
+          route_set.generate_path_from_route(route, params)
         end
       end
     end
@@ -113,7 +115,7 @@ module RubyRoutes
       path = path_to(name, local_params)
 
       # HTML forms only support GET and POST; emulate others with hidden field.
-      form_method = (method == 'get') ? 'get' : 'post'
+      form_method = method == 'get' ? 'get' : 'post'
 
       safe_path = CGI.escapeHTML(path.to_s)
       safe_form_method = CGI.escapeHTML(form_method)
@@ -126,7 +128,7 @@ module RubyRoutes
 
       safe_text = CGI.escapeHTML(text.to_s)
       html += "<button type=\"submit\">#{safe_text}</button>"
-      html += "</form>"
+      html += '</form>'
       html
     end
 

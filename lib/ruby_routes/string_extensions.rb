@@ -46,13 +46,13 @@ class String
     when /y$/
       sub(/y$/, 'ies')
     when /sh$/, /ch$/, /x$/
-      self + 'es'
+      "#{self}es"
     when /z$/
-      self + 'zes'
+      "#{self}zes"
     when /s$/
       self
     else
-      self + 's'
+      "#{self}s"
     end
   end
 end
