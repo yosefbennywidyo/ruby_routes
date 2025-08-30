@@ -58,13 +58,25 @@ module RubyRoutes
           raise ArgumentError, "Disallowed DSL method: #{method_name.inspect}" unless allowlist.include?(method_name)
 
           # (Optional) shallow dup args to avoid later mutation side‑effects
-          safe_args = arguments.map do |a|
-            a.is_a?(String) || a.is_a?(Numeric) || a.is_a?(Symbol) ? a : a.dup
+          safe_args = arguments.map do |argument|
+            argument.is_a?(String) || argument.is_a?(Numeric) || argument.is_a?(Symbol) ? argument : argument.dup
           rescue StandardError
-            a
+            argument
           end
 
-          router.public_send(method_name, *safe_args, &definition_block)
+          case method_name
+          when :get, :post, :put, :patch, :delete, :head, :options
+            router.send(method_name, *safe_args, &definition_block)
+          when :match, :root, :resources, :resource
+            router.send(method_name, *safe_args, &definition_block)
+          when :namespace, :scope, :constraints, :defaults
+            router.send(method_name, *safe_args, &definition_block)
+          when :mount, :concern, :concerns
+            router.send(method_name, *safe_args, &definition_block)
+          else
+            # This shouldn't be reached due to allowlist check above
+            raise ArgumentError, "Unsupported DSL method: #{method_name.inspect}"
+          end
         end
 
         router.finalize!
