@@ -26,12 +26,12 @@ module RubyRoutes
       #
       # @return [Hash{Symbol => String}]
       SYMBOL_MAP = {
-        get:     RubyRoutes::Constant::HTTP_GET,
-        post:    RubyRoutes::Constant::HTTP_POST,
-        put:     RubyRoutes::Constant::HTTP_PUT,
-        patch:   RubyRoutes::Constant::HTTP_PATCH,
-        delete:  RubyRoutes::Constant::HTTP_DELETE,
-        head:    RubyRoutes::Constant::HTTP_HEAD,
+        get: RubyRoutes::Constant::HTTP_GET,
+        post: RubyRoutes::Constant::HTTP_POST,
+        put: RubyRoutes::Constant::HTTP_PUT,
+        patch: RubyRoutes::Constant::HTTP_PATCH,
+        delete: RubyRoutes::Constant::HTTP_DELETE,
+        head: RubyRoutes::Constant::HTTP_HEAD,
         options: RubyRoutes::Constant::HTTP_OPTIONS
       }.freeze
 
@@ -53,12 +53,13 @@ module RubyRoutes
       #
       # @param method_input [String, Symbol, #to_s]
       # @return [String] canonical uppercase representation
-      #   (cached/transformed values are frozen; uppercase fast-path may returns the original String)
+      #   (cached/transformed values are frozen; uppercase fast-path may return the original String)
       def normalize_http_method(method_input)
         case method_input
         when String
           key = method_input.frozen? ? method_input : method_input
           return key if already_upper_ascii?(key)
+
           METHOD_CACHE[key] ||= ascii_upcase(key).freeze
         when Symbol
           SYMBOL_MAP[method_input] || (METHOD_CACHE[method_input] ||= ascii_upcase(method_input.to_s).freeze)
@@ -66,6 +67,7 @@ module RubyRoutes
           coerced = method_input.to_s
           key     = coerced.frozen? ? coerced : coerced
           return key if already_upper_ascii?(key)
+
           METHOD_CACHE[key] ||= ascii_upcase(key).freeze
         end
       end
@@ -96,6 +98,7 @@ module RubyRoutes
           end
         end
         return original unless any_lowercase_transformed
+
         byte_array.pack('C*')
       end
     end

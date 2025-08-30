@@ -101,6 +101,7 @@ module RubyRoutes
       # @return [String] frozen key string
       def build_key(components, delimiter = ':')
         return RubyRoutes::Constant::EMPTY_STRING if components.empty?
+
         buffer = Thread.current[:ruby_routes_key_buf] ||= String.new
         buffer.clear
         index = 0
@@ -129,6 +130,7 @@ module RubyRoutes
       # @return [String] frozen key (empty if none required)
       def cache_key_for_params(required_params, merged)
         return RubyRoutes::Constant::EMPTY_STRING if required_params.nil? || required_params.empty?
+
         buffer = Thread.current[:ruby_routes_param_key_buf] ||= String.new
         buffer.clear
 
@@ -160,6 +162,7 @@ module RubyRoutes
       # @return [String]
       def param_cache_key_reuse(required_params, merged)
         return RubyRoutes::Constant::EMPTY_STRING if required_params.nil? || required_params.empty?
+
         buffer = Thread.current[:ruby_routes_param_key_buf] ||= String.new
         buffer.clear
 

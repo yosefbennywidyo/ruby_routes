@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module RubyRoutes
   module Utility
     # PathUtility
@@ -28,7 +30,7 @@ module RubyRoutes
       #   normalize_path('/')        # => "/"
       def normalize_path(raw_path)
         normalized = raw_path.to_s
-        normalized = '/' + normalized unless normalized.start_with?('/')
+        normalized = "/#{normalized}" unless normalized.start_with?('/')
         normalized = normalized[0..-2] if normalized.length > 1 && normalized.end_with?('/')
         normalized
       end
@@ -45,7 +47,8 @@ module RubyRoutes
       def split_path(raw_path)
         path_no_query = raw_path.to_s.split('?', 2).first
         return [] if path_no_query.empty?
-        path_no_query.split('/').reject { |segment| segment.empty? }
+
+        path_no_query.split('/').reject(&:empty?)
       end
 
       # Join path parts into a normalized absolute path.

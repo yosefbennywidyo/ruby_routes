@@ -11,6 +11,7 @@ module RubyRoutes
 
       def singularize(str)
         return '' if str.nil?
+
         case str
         when /ies$/ then str.sub(/ies$/, 'y')
         when /s$/   then str.sub(/s$/, '')
@@ -20,6 +21,7 @@ module RubyRoutes
 
       def pluralize(str)
         return '' if str.nil?
+
         case str
         when /y$/          then str.sub(/y$/, 'ies')
         when /(sh|ch|x)$/  then "#{str}es"
