@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative 'utility/key_builder_utility'
 require_relative 'utility/method_utility'
 
@@ -47,7 +49,7 @@ module RubyRoutes
       @named_routes[route_obj.name] = route_obj if route_obj.named?
       route_obj
     end
-    alias_method :add_route, :add_to_collection
+    alias add_route add_to_collection
 
     # Register a newly created Route (called from RouteUtility#define).
     def register(route)
@@ -73,7 +75,8 @@ module RubyRoutes
     # @raise [RouteNotFound]
     def find_named_route(name)
       route = @named_routes[name]
-      raise RouteNotFound.new("No route named '#{name}'") unless route
+      raise RouteNotFound, "No route named '#{name}'" unless route
+
       route
     end
 
@@ -83,9 +86,11 @@ module RubyRoutes
     # @param path [String]
     # @return [Hash, nil] { route:, params:, controller:, action: }
     def match(http_method, path)
-      normalized_method = (
-        http_method.is_a?(String) && normalize_http_method(http_method).equal?(http_method)
-      ) ? http_method : normalize_http_method(http_method)
+      normalized_method = if http_method.is_a?(String) && normalize_http_method(http_method).equal?(http_method)
+                            http_method
+                          else
+                            normalize_http_method(http_method)
+                          end
 
       raw_path   = path.to_s
       lookup_key = cache_key_for_request(normalized_method, raw_path)
@@ -191,6 +196,7 @@ module RubyRoutes
     # @return [Enumerator, self]
     def each(&block)
       return enum_for(:each) unless block
+
       @routes.each(&block)
       self
     end
@@ -212,7 +218,9 @@ module RubyRoutes
     # @return [void]
     def insert_cache_entry(cache_key, entry)
       if @recognition_cache.size >= @recognition_cache_max
-        @recognition_cache.keys.first(@recognition_cache_max / 4).each { |evict_key| @recognition_cache.delete(evict_key) }
+        @recognition_cache.keys.first(@recognition_cache_max / 4).each do |evict_key|
+          @recognition_cache.delete(evict_key)
+        end
       end
       @recognition_cache[cache_key] = entry
     end
@@ -225,6 +233,7 @@ module RubyRoutes
     # @return [void]
     def merge_query_params(route_obj, full_path, param_hash)
       return unless full_path.to_s.include?('?')
+
       if route_obj.respond_to?(:parse_query_params)
         qp = route_obj.parse_query_params(full_path)
         param_hash.merge!(qp) if qp
@@ -260,10 +269,8 @@ module RubyRoutes
       path_key   = request_path.is_a?(String) ? request_path.freeze : request_path.to_s.freeze
 
       # Fast hit
-      if (path_map = @request_key_pool[method_key])
-        if (existing = path_map[path_key])
-          return existing
-        end
+      if (path_map = @request_key_pool[method_key]) && (existing = path_map[path_key])
+        return existing
       end
 
       # Build composite from frozen normalized keys ONLY (avoid original mutable inputs)
@@ -281,10 +288,8 @@ module RubyRoutes
         @entry_count += 1
       else
         evict_method, evict_path = @request_key_ring[@ring_index]
-        if (evict_bucket = @request_key_pool[evict_method])
-          if evict_bucket.delete(evict_path) && evict_bucket.empty?
-            @request_key_pool.delete(evict_method)
-          end
+        if (evict_bucket = @request_key_pool[evict_method]) && evict_bucket.delete(evict_path) && evict_bucket.empty?
+          @request_key_pool.delete(evict_method)
         end
         @request_key_ring[@ring_index] = [method_key, path_key]
         @ring_index += 1
