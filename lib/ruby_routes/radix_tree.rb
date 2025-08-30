@@ -5,6 +5,8 @@ require_relative 'segment'
 require_relative 'utility/path_utility'
 require_relative 'utility/method_utility'
 require_relative 'node'
+require_relative 'radix_tree/inserter'
+require_relative 'radix_tree/finder'
 
 module RubyRoutes
   # RadixTree
@@ -34,6 +36,8 @@ module RubyRoutes
   class RadixTree
     include RubyRoutes::Utility::PathUtility
     include RubyRoutes::Utility::MethodUtility
+    include Inserter
+    include Finder
 
     class << self
       # Backwards DSL convenience: RadixTree.new(args) → Route
@@ -55,7 +59,7 @@ module RubyRoutes
       @empty_segment_list = [].freeze
     end
 
-    # Add a route to the tree.
+    # Add a route to the tree (delegates insertion logic).
     #
     # @param raw_path [String]
     # @param http_methods [Array<String,Symbol>]
@@ -68,117 +72,9 @@ module RubyRoutes
       route_handler
     end
 
-    # Insert (compile) a route path into the tree structure.
-    #
-    # @param path_string [String]
-    # @param http_methods [Array<String>]
-    # @param route_handler [Object]
-    # @return [Object]
-    def insert_route(path_string, http_methods, route_handler)
-      return route_handler if path_string.nil? || path_string.empty?
-
-      segment_tokens = split_path(path_string)
-      current_node   = @root_node
-
-      segment_tokens.each do |segment_token|
-        if segment_token.start_with?(':')
-          parameter_name = segment_token[1..-1]
-          unless current_node.dynamic_child
-            current_node.dynamic_child = Node.new
-            current_node.dynamic_child.param_name = parameter_name
-          end
-          current_node = current_node.dynamic_child
-        elsif segment_token.start_with?('*')
-          parameter_name = segment_token[1..-1]
-          unless current_node.wildcard_child
-            current_node.wildcard_child = Node.new
-            current_node.wildcard_child.param_name = parameter_name
-          end
-          current_node = current_node.wildcard_child
-          break # wildcard consumes remaining path
-        else
-          literal_segment = segment_token.freeze
-          current_node.static_children[literal_segment] ||= Node.new
-          current_node = current_node.static_children[literal_segment]
-        end
-      end
-
-      current_node.is_endpoint = true
-      http_methods.each { |method_str| current_node.handlers[method_str] = route_handler }
-      route_handler
-    end
-
-    # Locate a handler for (path, method).
-    #
-    # @param request_path_input [String]
-    # @param request_method_input [String,Symbol]
-    # @param params_out [Hash] optional params Hash to populate
-    # @return [Array<(Object, Hash)>] [handler_or_nil, params_hash]
+    # Public find delegates to Finder#find (now simplified on this class).
     def find(request_path_input, request_method_input, params_out = {})
-      request_path      = request_path_input.to_s
-      normalized_method = normalize_http_method(request_method_input)
-
-      if request_path.empty? || request_path == '/'
-        return @root_node.is_endpoint && @root_node.handlers[normalized_method] ?
-          [@root_node.handlers[normalized_method], params_out || {}] :
-          [nil, params_out || {}]
-      end
-
-      segment_tokens = split_path_cached(request_path)
-      return [nil, params_out || {}] if segment_tokens.empty?
-
-      captured_params     = params_out || {}
-      best_match_node     = nil
-      best_match_params   = nil
-      current_node        = @root_node
-
-      segment_tokens.each_with_index do |segment_text, segment_index|
-        next_node, stop_traversal = current_node.traverse_for(
-          segment_text,
-          segment_index,
-          segment_tokens,
-          captured_params
-        )
-
-        unless next_node
-          if best_match_node
-            handler = best_match_node.handlers[normalized_method]
-            return check_constraints(handler, best_match_params) ? [handler, best_match_params] : [nil, captured_params ]
-          end
-          return [nil, captured_params]
-        end
-
-        current_node = next_node
-
-        if current_node.is_endpoint && current_node.handlers[normalized_method]
-          best_match_node   = current_node
-          best_match_params = captured_params
-        end
-
-        break if stop_traversal
-      end
-
-      # Primary candidate: current node
-      if current_node.is_endpoint && (handler = current_node.handlers[normalized_method])
-        if check_constraints(handler, captured_params)
-          return [handler, captured_params]
-        elsif best_match_node && best_match_node != current_node
-          # Fallback to earlier (shorter) match if its constraints pass
-          fallback = best_match_node.handlers[normalized_method]
-          return [fallback, best_match_params] if fallback && check_constraints(fallback, best_match_params)
-          return [nil, captured_params]
-        else
-          return [nil, captured_params]
-        end
-      end
-
-      # Longest prefix fallback
-      if best_match_node
-        handler = best_match_node.handlers[normalized_method]
-        return [handler, best_match_params] if handler && check_constraints(handler, best_match_params)
-      end
-
-      [nil, captured_params]
+      super
     end
 
     private
@@ -205,11 +101,14 @@ module RubyRoutes
     # @return [Boolean]
     def check_constraints(route_handler, captured_params)
       return true unless route_handler.respond_to?(:validate_constraints_fast!)
-      # Use a duplicate to avoid unintended mutation by validators.
-      route_handler.validate_constraints_fast!(captured_params)
-      true
-    rescue RubyRoutes::ConstraintViolation
-      false
+
+      begin
+        # Use a duplicate to avoid unintended mutation by validators.
+        route_handler.validate_constraints_fast!(captured_params)
+        true
+      rescue RubyRoutes::ConstraintViolation
+        false
+      end
     end
   end
 end
