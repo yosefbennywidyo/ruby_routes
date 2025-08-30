@@ -75,7 +75,7 @@ module RubyRoutes
       return self if @frozen
 
       @frozen = true
-      @route_set.freeze if @route_set.respond_to?(:freeze)
+      @route_set.freeze
       @scope_stack.freeze
       @concerns.freeze
       self
