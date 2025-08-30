@@ -49,7 +49,7 @@ require_relative 'utility/route_utility'
 module RubyRoutes
   class Router
     # All HTTP verbs supported by #mount helper.
-    VERBS_ALL = [:get, :post, :put, :patch, :delete, :head, :options].freeze
+    VERBS_ALL = %i[get post put patch delete head options].freeze
 
     # @return [RouteSet] container of compiled Route objects.
     attr_reader :route_set
@@ -73,6 +73,7 @@ module RubyRoutes
     # Return frozen router (idempotent).
     def finalize!
       return self if @frozen
+
       @frozen = true
       @route_set.freeze if @route_set.respond_to?(:freeze)
       @scope_stack.freeze
@@ -89,15 +90,15 @@ module RubyRoutes
     # Define a GET route.
     # @param path [String]
     # @param options [Hash] :to, :controller/:action, :constraints, :defaults, :via (ignored if provided)
-    def get(path, options = {})      ; add_route(path, build_route_options(options, :get))    ; end
+    def get(path, options = {}) = add_route(path, build_route_options(options, :get))
     # Define a POST route.
-    def post(path, options = {})     ; add_route(path, build_route_options(options, :post))   ; end
+    def post(path, options = {}) = add_route(path, build_route_options(options, :post))
     # Define a PUT route.
-    def put(path, options = {})      ; add_route(path, build_route_options(options, :put))    ; end
+    def put(path, options = {}) = add_route(path, build_route_options(options, :put))
     # Define a PATCH route.
-    def patch(path, options = {})    ; add_route(path, build_route_options(options, :patch))  ; end
+    def patch(path, options = {}) = add_route(path, build_route_options(options, :patch))
     # Define a DELETE route.
-    def delete(path, options = {})   ; add_route(path, build_route_options(options, :delete)) ; end
+    def delete(path, options = {}) = add_route(path, build_route_options(options, :delete))
 
     # Generic multi‑verb matcher.
     # Caller must supply :via => symbol or array of symbols.
@@ -110,7 +111,7 @@ module RubyRoutes
     # Define root ("/") route (GET).
     # @param options [Hash]
     def root(options = {})
-      add_route("/", options.merge(via: :get))
+      add_route('/', options.merge(via: :get))
     end
 
     # ---- RESTful Resources -------------------------------------------------
@@ -171,7 +172,7 @@ module RubyRoutes
           nested_plur   = RubyRoutes::Utility::InflectorUtility.pluralize(nested_name)
           nested_ctrl   = nested_plur
           n_index   = "#{nested_ctrl}#index"
-            n_new     = "#{nested_ctrl}#new"
+          n_new     = "#{nested_ctrl}#new"
           n_create  = "#{nested_ctrl}#create"
           n_show    = "#{nested_ctrl}#show"
           n_edit    = "#{nested_ctrl}#edit"
@@ -265,6 +266,7 @@ module RubyRoutes
       names.each do |nm|
         c = @concerns[nm]
         raise "Concern '#{nm}' not found" unless c
+
         instance_eval(&c)
       end
       instance_eval(&block) if block
@@ -295,6 +297,7 @@ module RubyRoutes
     def push_scope(entry)
       @scope_stack.push(entry)
       return unless block_given?
+
       begin
         yield
       ensure
@@ -342,6 +345,7 @@ module RubyRoutes
       needs_via = via_sym && !base_opts.key?(:via)
       needs_to  = to_string && !base_opts.key?(:to)
       return base_opts unless needs_via || needs_to
+
       dup = base_opts.dup
       dup[:via] = via_sym if needs_via
       dup[:to]  = to_string if needs_to
@@ -349,7 +353,7 @@ module RubyRoutes
     end
 
     def ensure_unfrozen!
-      raise "Router finalized (immutable)" if @frozen
+      raise 'Router finalized (immutable)' if @frozen
     end
   end
 end
