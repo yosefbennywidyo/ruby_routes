@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require 'set'
+require_relative '../utility/path_utility'
+
 module RubyRoutes
   class Route
     # SegmentCompiler: path analysis + extraction
@@ -8,9 +11,9 @@ module RubyRoutes
     # a route path. It includes utilities for compiling path segments, required
     # parameters, and static paths, as well as extracting parameters from a
     # request path.
-    #
-    # @module RubyRoutes::Route::SegmentCompiler
     module SegmentCompiler
+      include RubyRoutes::Utility::PathUtility
+
       private
 
       # Compile the segments from the path.
@@ -43,7 +46,7 @@ module RubyRoutes
                                   dynamic_param_names.freeze
                                 else
                                   dynamic_param_names.reject do |name|
-                                    @defaults.key?(name) || @defaults.key?(name.to_sym)
+                                    @defaults.key?(name) || (@defaults.key?(name.to_sym) if name.is_a?(String))
                                   end.freeze
                                 end
         @required_params_set  = @required_params.to_set.freeze

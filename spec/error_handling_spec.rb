@@ -185,8 +185,10 @@ RSpec.describe 'Error Handling and Edge Cases' do
     let(:node) { RubyRoutes::Node.new }
 
     it 'handles traversal with empty segments' do
-      result = node.traverse_for('', 0, [''], {})
-      expect(result).to be_an(Array)
+      result, should_break, captured = node.traverse_for('', 0, [''], {})
+      expect(result).to be_nil
+      expect(should_break).to be false
+      expect(captured).to eq({})
     end
 
     it 'handles parameter name assignment' do

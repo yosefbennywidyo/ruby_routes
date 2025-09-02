@@ -52,7 +52,7 @@ module RubyRoutes
 
     # Initialize empty tree and split cache.
     def initialize
-      @root_node          = Node.new
+      @root          = Node.new
       @split_cache        = RubyRoutes::Route::SmallLru.new(2048)
       @split_cache_max    = 2048
       @split_cache_order  = []
@@ -92,23 +92,6 @@ module RubyRoutes
       segments = split_path(raw_path)
       @split_cache.set(raw_path, segments)
       segments
-    end
-
-    # Evaluate constraint rules for a candidate route.
-    #
-    # @param route_handler [Object]
-    # @param captured_params [Hash]
-    # @return [Boolean]
-    def check_constraints(route_handler, captured_params)
-      return true unless route_handler.respond_to?(:validate_constraints_fast!)
-
-      begin
-        # Use a duplicate to avoid unintended mutation by validators.
-        route_handler.validate_constraints_fast!(captured_params)
-        true
-      rescue RubyRoutes::ConstraintViolation
-        false
-      end
     end
   end
 end

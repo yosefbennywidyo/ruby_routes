@@ -1,8 +1,10 @@
 # frozen_string_literal: true
 
+require_relative 'lib/ruby_routes/version'
+
 Gem::Specification.new do |spec|
   spec.name          = 'ruby_routes'
-  spec.version       = '2.3.0'
+  spec.version       = RubyRoutes::VERSION
   spec.authors       = ['Yosef Benny Widyokarsono']
   spec.email         = ['yosefbennywidyo@gmail.com']
   spec.summary       = 'A Rails-like routing system for Ruby'

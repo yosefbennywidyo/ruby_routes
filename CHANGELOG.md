@@ -1,20 +1,54 @@
 # Changelog
 
+## 2.4.0 - 2025-09-04
+
+- **Performance**: Significant optimizations in path caching, HTTP method normalization, and memory allocation reduction
+- **Bug Fixes**: Fixed route insertion issues, constraint validation problems, parameter handling edge cases, and path normalization consistency
+- **Refactoring**: Improved code organization, consistent naming across modules, and enhanced maintainability
+- **Documentation**: Added comprehensive USAGE.md with routing scenarios, enhanced inline documentation, and improved method descriptions
+- **Thread Safety**: Enhanced concurrent access handling and cache synchronization
+- **Testing**: Added extensive test coverage for edge cases, improved test reliability, and better error handling validation
+- **Code Quality**: Removed unused methods, improved error messages, and streamlined code structure
+
 ## 2.3.0 - 2025-09-02
 
-- Refactoring: Improved code organization, naming, and maintainability across router, route, segment, and utility modules.
-- Documentation: Enhanced documentation for clarity and consistency in UrlHelpers, Constant, and other modules.
-- Performance: Optimizations in caching strategies, parameter handling, and HTTP method normalization.
-- Additions: New utility modules (InflectorUtility, MethodUtility), constants, and comprehensive tests.
-- Fixes: Bug fixes in route insertion, constraint validation, and parameter handling.
+- **Refactoring**: Improved code organization, naming, and maintainability across router, route, segment, and utility modules.
+- **Documentation***: Enhanced documentation for clarity and consistency in UrlHelpers, Constant module, and other modules.
+- **Performance**: Optimizations in caching strategies, parameter handling, and HTTP method normalization.
+- **Additions**: New utility modules (InflectorUtility, MethodUtility), constants, and comprehensive tests.
+- **Fixes**: Bug fixes in route insertion, constraint validation, and parameter handling.
+
+## 2.2.0 - 2025-08-31
+
+- **Security**: Enhanced subprocess execution security in benchmarks and scripts.
+- **Performance**: Optimizations in path generation, parameter validation, cache handling, and RadixTree.
+- **Features**: Added KeyBuilderUtility, PathUtility, RouteUtility modules; method_missing for params.
+- **Refactoring**: Improved code organization, naming, and readability.
+- **Tests**: Added comprehensive tests for concerns, private methods.
+- **Fixes**: Fixed longest prefix match logic, insecure Object.send usage.
+
+## 2.1.0 - 2025-08-22
+
+- **Features**: Added tests for various modules (Constant, UrlHelpers, segments, router, query params, pluralize).
+- **Enhancements**: Extended pluralize method, improved path handling, added rack requirement.
+- **Refactoring**: Removed unnecessary whitespace.
+
+## 2.0.0 - 2025-08-20
+
+- **Features**: Enhanced resources routing for custom paths and controllers.
+- **Security**: Fixed command injection, replaced Proc constraints, fixed XSS in URL helpers, multiple vulnerabilities.
+- **Performance**: 40x faster routing, major optimizations.
+- **Fixes**: Fixed cache eviction, button_to mutation, wildcard parameter extraction, path generation, router initialization, HTML form method.
+- **Tests**: Added comprehensive tests for coverage, integration, utilities, LRU, core routing.
+- **Refactoring**: Improved test readability.
 
 ## 1.1.0 - 2025-08-17
 
-- Route Matching Optimization: Reduced route matching time by ~40-50% through optimized cache key building and method normalization
-- Memory Usage Reduction: Decreased object allocations by ~30-40% in hot paths through thread-local hash reuse and frozen string optimizations
-- Cache Performance: Enhanced recognition cache with better hit rates (8192 entries) and simplified LRU eviction strategy
-- RadixTree Traversal: Streamlined path splitting and traversal logic with fast-path optimizations for common route patterns (1-3 segments)
-- Parameter Handling: Optimized parameter extraction and merging with reduced string allocations and improved constraint validation
+- **Route Matching Optimization**: Reduced route matching time by ~40-50% through optimized cache key building and method normalization
+- **Memory Usage Reduction**: Decreased object allocations by ~30-40% in hot paths through thread-local hash reuse and frozen string optimizations
+- **Cache Performance**: Enhanced recognition cache with better hit rates (8192 entries) and simplified LRU eviction strategy
+- **RadixTree Traversal**: Streamlined path splitting and traversal logic with fast-path optimizations for common route patterns (1-3 segments)
+- **Parameter Handling**: Optimized parameter extraction and merging with reduced string allocations and improved constraint validation
 
 ## 1.0.0 - 2025-08-17
 
@@ -32,8 +66,8 @@
 - Segment classes extracted into `lib/ruby_routes/segments/` (Static, Dynamic, Wildcard).
 - Node traversal logic encapsulated in `Node#traverse_for`.
 - Recognition cache improvements and more stable lookup keys (path-only caching).
-- SmallLru: strategies extracted to top-level classes and exposed as singletons for lower allocations.
-- RouteSet: added collection helpers (size, length, empty?, routes, clear!, find_named_route, generate_path, generate_path_from_route).
+- **SmallLru**: strategies extracted to top-level classes and exposed as singletons for lower allocations.
+- **RouteSet**: added collection helpers (size, length, empty?, routes, clear!, find_named_route, generate_path, generate_path_from_route).
 
 ### Bug Fixes
 
@@ -53,10 +87,14 @@
 
 ## 0.2.0 — 2025-08-17
 
-- Performance: use radix-tree params directly in `RubyRoutes::RouteSet#match` to avoid reparsing paths.
-- Performance: faster path-splitting in `RubyRoutes::RadixTree#find`.
-- Path generation: tokenized templates + bounded LRU cache `RubyRoutes::Route#generate_path`.
-- Caching: adaptive small LRU to avoid thrash (`RubyRoutes::Route::SmallLru`).
-- Encoding: cheap safe-ASCII test before `URI.encode_www_form_component`.
-- Constraint checks: lightweight checks moved into tree traversal for early rejection.
-- Misc: avoid repeated string upcasing in `RubyRoutes::Node#get_handler`.
+- **Performance**: use radix-tree params directly in `RubyRoutes::RouteSet#match` to avoid reparsing paths.
+- **Performance**: faster path-splitting in `RubyRoutes::RadixTree#find`.
+- **Path generation**: tokenized templates + bounded LRU cache `RubyRoutes::Route#generate_path`.
+- **Caching***: adaptive small LRU to avoid thrash (`RubyRoutes::Route::SmallLru`).
+- **Encoding**: cheap safe-ASCII test before `URI.encode_www_form_component`.
+- **Constraint checks**: lightweight checks moved into tree traversal for early rejection.
+- **Misc**: avoid repeated string upcasing in `RubyRoutes::Node#get_handler`.
+
+## 0.1.0 - 2025-08-17
+
+- Initial release of RubyRoutes gem.

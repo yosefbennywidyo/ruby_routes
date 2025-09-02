@@ -2,6 +2,7 @@
 
 require_relative 'segment'
 require_relative 'utility/path_utility'
+require_relative 'utility/method_utility'
 
 module RubyRoutes
   # Node
@@ -28,6 +29,7 @@ module RubyRoutes
     attr_reader :handlers, :static_children
 
     include RubyRoutes::Utility::PathUtility
+    include RubyRoutes::Utility::MethodUtility
 
     def initialize
       @is_endpoint     = false
@@ -44,8 +46,8 @@ module RubyRoutes
     # @param handler [Object] route or callable
     # @return [Object] handler
     def add_handler(method, handler)
-      method_str = normalize_method(method)
-      @handlers[method_str] = handler
+      method_key = normalize_http_method(method)
+      @handlers[method_key] = handler
       @is_endpoint = true
       handler
     end
@@ -55,24 +57,30 @@ module RubyRoutes
     # @param method [String, Symbol]
     # @return [Object, nil]
     def get_handler(method)
-      @handlers[normalize_method(method)]
+      @handlers[normalize_http_method(method)]
     end
 
     # Traverses from this node using a single path segment.
-    # Returns [next_node_or_nil, stop_traversal(Boolean)].
+    # Returns [next_node_or_nil, stop_traversal(Boolean), captured_params(Hash)].
     #
     # Optimized + simplified (cyclomatic / perceived complexity, length).
+    #
+    # @param segment [String] the path segment to match
+    # @param index [Integer] the segment index in the full path
+    # @param segments [Array<String>] all path segments
+    # @param params [Hash] (unused in this method; mutation deferred)
+    # @return [Array] [next_node, stop, captured] or NO_TRAVERSAL_RESULT
     def traverse_for(segment, index, segments, params)
-      return [@static_children[segment], false] if @static_children[segment]
+      return [@static_children[segment], false, {}] if @static_children[segment]
 
       if @dynamic_child
-        capture_dynamic_param(params, @dynamic_child, segment)
-        return [@dynamic_child, false]
+        captured = capture_dynamic_param(@dynamic_child, segment)
+        return [@dynamic_child, false, captured]
       end
 
       if @wildcard_child
-        capture_wildcard_param(params, @wildcard_child, segments, index)
-        return [@wildcard_child, true]
+        captured = capture_wildcard_param(@wildcard_child, segments, index)
+        return [@wildcard_child, true, captured]
       end
 
       RubyRoutes::Constant::NO_TRAVERSAL_RESULT
@@ -80,27 +88,27 @@ module RubyRoutes
 
     private
 
-    # Captures a dynamic parameter value into the params hash if applicable.
+    # Captures a dynamic parameter value and returns it for later assignment.
     #
-    # @param params [Hash, nil] the parameters hash to update
-    # @param dyn_node [Node] the dynamic child node
+    # @param dynamic_node [Node] the dynamic child node
     # @param value [String] the segment value to capture
-    def capture_dynamic_param(params, dyn_node, value)
-      return unless params && dyn_node.param_name
+    # @return [Hash] captured parameter hash or empty hash if no param
+    def capture_dynamic_param(dynamic_node, value)
+      return {} unless dynamic_node.param_name
 
-      params[dyn_node.param_name] = value
+      { dynamic_node.param_name => value }
     end
 
-    # Captures a wildcard parameter value into the params hash if applicable.
+    # Captures a wildcard parameter value and returns it for later assignment.
     #
-    # @param params [Hash, nil] the parameters hash to update
     # @param wc_node [Node] the wildcard child node
     # @param segments [Array<String>] the full path segments
     # @param index [Integer] the current segment index
-    def capture_wildcard_param(params, wc_node, segments, index)
-      return unless params && wc_node.param_name
+    # @return [Hash] captured parameter hash or empty hash if no param
+    def capture_wildcard_param(wildcard_node, segments, index)
+      return {} unless wildcard_node.param_name
 
-      params[wc_node.param_name] = segments[index..].join('/')
+      { wildcard_node.param_name => segments[index..].join('/') }
     end
   end
 end

@@ -62,8 +62,9 @@ module RubyRoutes
       # `RubyRoutes::Constant::RECORDED_METHODS`. Each method records its
       # invocation (method name, arguments, and block) in `@recorded_calls`.
       #
-      # @param *arguments [Array] The arguments passed to the DSL method.
-      # @param definition_block [Proc, nil] The block passed to the DSL method.
+      # The dynamically defined methods accept arbitrary arguments and an optional block,
+      # which are recorded for later processing by the router.
+      #
       # @return [nil]
       RubyRoutes::Constant::RECORDED_METHODS.each do |method_name|
         define_method(method_name) do |*arguments, &definition_block|

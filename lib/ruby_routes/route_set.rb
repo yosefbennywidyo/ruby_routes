@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative 'radix_tree'
 require_relative 'utility/key_builder_utility'
 require_relative 'utility/method_utility'
 require_relative 'route_set/cache_helpers'
@@ -18,7 +19,11 @@ module RubyRoutes
   #   a small in‑memory recognition cache.
   # - Delegate structural path matching to an internal RadixTree.
   #
-  # Thread safety: not thread‑safe; build during boot, read per request.
+  # Thread Safety:
+  # - RouteSet instances are not fully thread-safe for modifications.
+  # - Build during boot/initialization, then use read-only per request.
+  # - Global caches (via KeyBuilderUtility) are thread-safe for concurrent reads.
+  # - Per-instance recognition cache is not protected (single-threaded usage assumed).
   #
   # @api public (primary integration surface)
   class RouteSet
@@ -85,6 +90,18 @@ module RubyRoutes
       route.generate_path(params)
     end
 
+    # Replay recorded calls on the router instance.
+    #
+    # This method replays all the recorded route definitions and other
+    # configuration calls on the given router instance.
+    #
+    # @param router [Router] The router instance to replay calls on.
+    # @return [void]
+    def replay_recorded_calls(router)
+      # Placeholder for actual implementation
+      # Iterate over recorded calls and apply them to the router
+    end
+
     private
 
     # Set up the radix tree for structural path matching.
@@ -117,7 +134,11 @@ module RubyRoutes
       return nil unless matched_route
 
       # Ensure we have a mutable hash for merging defaults / query params.
-      extracted_params = extracted_params.dup if extracted_params&.frozen?
+      if extracted_params.nil?
+        extracted_params = {}
+      elsif extracted_params.frozen?
+        extracted_params = extracted_params.dup
+      end
 
       merge_query_params(matched_route, raw_path, extracted_params)
       merge_defaults(matched_route, extracted_params)

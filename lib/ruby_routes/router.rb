@@ -3,7 +3,8 @@
 require_relative 'utility/inflector_utility'
 require_relative 'utility/route_utility'
 require_relative 'router/http_helpers'
-
+require_relative 'constant'
+require_relative 'route_set'
 module RubyRoutes
   # RubyRoutes::Router
   #
@@ -117,6 +118,7 @@ module RubyRoutes
     # @return [Router] self.
     def resources(resource_name, options = {}, &nested_block)
       define_resource_routes(resource_name, options, &nested_block)
+      self
     end
 
     # Define a singular resource.

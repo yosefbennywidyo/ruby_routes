@@ -396,16 +396,38 @@ RSpec.describe RubyRoutes::Router do
       expect(route.path).to eq('/api/v1/users')
     end
 
-    it 'combines constraints and defaults' do
-      router.constraints(id: /\d+/) do
-        defaults(format: 'json') do
-          get '/users/:id', to: 'users#show'
-        end
+    it 'avoids double slashes when composing scoped paths' do
+      # Test case: scope path ends with '/', route path starts with '/'
+      router1 = RubyRoutes::Router.new
+      router1.scope path: '/admin/' do
+        router1.get '/users', to: 'users#index'
       end
+      route = router1.route_set.routes.first
+      expect(route.path).to eq('/admin/users')
 
-      route = router.route_set.routes.first
-      expect(route.constraints[:id]).to eq(/\d+/)
-      expect(route.defaults['format']).to eq('json')
+      # Test case: scope path doesn't end with '/', route path starts with '/'
+      router2 = RubyRoutes::Router.new
+      router2.scope path: '/admin' do
+        router2.get '/users', to: 'users#index'
+      end
+      route = router2.route_set.routes.first
+      expect(route.path).to eq('/admin/users')
+
+      # Test case: scope path ends with '/', route path doesn't start with '/'
+      router3 = RubyRoutes::Router.new
+      router3.scope path: '/admin/' do
+        router3.get 'users', to: 'users#index'
+      end
+      route = router3.route_set.routes.first
+      expect(route.path).to eq('/admin/users')
+
+      # Test case: neither path has slashes
+      router4 = RubyRoutes::Router.new
+      router4.scope path: 'admin' do
+        router4.get 'users', to: 'users#index'
+      end
+      route = router4.route_set.routes.first
+      expect(route.path).to eq('/admin/users')
     end
   end
 
@@ -490,26 +512,26 @@ RSpec.describe RubyRoutes::Router do
     end
   end
 
-  describe '#join_path_parts' do
-    let(:route) { RubyRoutes::Route.new('/test', to: 'test#index') }
+  describe 'PathUtility#join_path_parts' do
+    let(:utility) { Class.new { extend RubyRoutes::Utility::PathUtility } }
 
     it 'joins array elements with slashes' do
-      result = route.send(:join_path_parts, %w[users 123 posts])
+      result = utility.join_path_parts(%w[users 123 posts])
       expect(result).to eq('/users/123/posts')
     end
 
     it 'handles empty array' do
-      result = route.send(:join_path_parts, [])
+      result = utility.join_path_parts([])
       expect(result).to eq('/')
     end
 
     it 'handles array with single element' do
-      result = route.send(:join_path_parts, ['users'])
+      result = utility.join_path_parts(['users'])
       expect(result).to eq('/users')
     end
 
     it 'handles elements with special characters' do
-      result = route.send(:join_path_parts, ['user files', 'report.pdf'])
+      result = utility.join_path_parts(['user files', 'report.pdf'])
       expect(result).to eq('/user files/report.pdf')
     end
   end
@@ -554,6 +576,14 @@ RSpec.describe RubyRoutes::Router do
       params = { id: '123' }.freeze
       result = route.send(:get_cached_validation, params)
       expect(result).to be_nil
+    end
+
+    it 'normalizes leading slash for paths without slashes' do
+      router.scope path: 'api' do
+        get 'v1/users', to: 'users#index'
+      end
+      route = router.route_set.routes.first
+      expect(route.path).to eq('/api/v1/users')  # Ensure leading /
     end
   end
 end

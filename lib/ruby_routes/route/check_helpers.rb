@@ -20,7 +20,7 @@ module RubyRoutes
       # @raise [RubyRoutes::ConstraintViolation] If the value is shorter than the minimum length.
       # @return [void]
       def check_min_length(constraint, value)
-        return unless constraint[:min_length] && value.length < constraint[:min_length]
+        return unless (min = constraint[:min_length]) && value && value.length < min
 
         raise RubyRoutes::ConstraintViolation, "Value too short (minimum #{constraint[:min_length]} characters)"
       end
@@ -36,7 +36,7 @@ module RubyRoutes
       # @raise [RubyRoutes::ConstraintViolation] If the value exceeds the maximum length.
       # @return [void]
       def check_max_length(constraint, value)
-        return unless constraint[:max_length] && value.length > constraint[:max_length]
+        return unless (max = constraint[:max_length]) && value && value.length > max
 
         raise RubyRoutes::ConstraintViolation, "Value too long (maximum #{constraint[:max_length]} characters)"
       end
@@ -52,7 +52,7 @@ module RubyRoutes
       # @raise [RubyRoutes::ConstraintViolation] If the value does not match the required format.
       # @return [void]
       def check_format(constraint, value)
-        return unless constraint[:format] && !value.match?(constraint[:format])
+        return unless (format = constraint[:format]) && value && !value.match?(format)
 
         raise RubyRoutes::ConstraintViolation, 'Value does not match required format'
       end
@@ -100,9 +100,15 @@ module RubyRoutes
       # @raise [RubyRoutes::ConstraintViolation] If the value is not in the allowed range.
       # @return [void]
       def check_range(constraint, value)
-        return unless constraint[:range] && !constraint[:range].cover?(value.to_i)
+        range = constraint[:range]
+        return unless range
+        begin
+          integer_value = Integer(value) # raises on nil, floats, or junk like "10abc"
+        rescue ArgumentError, TypeError
+          raise RubyRoutes::ConstraintViolation, 'Value not in allowed range'
+        end
 
-        raise RubyRoutes::ConstraintViolation, 'Value not in allowed range'
+        raise RubyRoutes::ConstraintViolation, 'Value not in allowed range' unless range.cover?(integer_value)
       end
     end
   end

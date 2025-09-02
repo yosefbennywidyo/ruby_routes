@@ -18,9 +18,11 @@ module RubyRoutes
       # @param route [Route] The route to add.
       # @return [Route] The added route.
       def add_to_collection(route)
-        @routes << route
-        @radix_tree.add(route.path, route.methods, route)
         @named_routes[route.name] = route if route.named?
+        @radix_tree.add(route.path, route.methods, route)
+        return route if @routes.include?(route) # Prevent duplicate insertion
+
+        @routes << route
         route
       end
       alias add_route add_to_collection
@@ -33,8 +35,7 @@ module RubyRoutes
       # @param route [Route] The route to register.
       # @return [Route] The registered route.
       def register(route)
-        (@routes ||= []) << route
-        route
+        add_to_collection(route)
       end
 
       # Find any route (no params) for a method/path.
@@ -55,7 +56,7 @@ module RubyRoutes
       # This method retrieves a route by its name from the named routes collection.
       # If no route is found, it raises a `RouteNotFound` error.
       #
-      # @param name [Symbol, String] The name of the route.
+      # @param name [Symbol] The name of the route.
       # @return [Route] The named route.
       # @raise [RouteNotFound] If no route with the given name is found.
       def find_named_route(name)
@@ -68,8 +69,8 @@ module RubyRoutes
       # Clear all routes and caches.
       #
       # This method clears the internal route collection, named routes, recognition
-      # cache, and radix tree. It also resets cache hit/miss counters and the
-      # request key pool.
+      # cache, and radix tree. It also resets cache hit/miss counters and clears
+      # the global request key cache.
       #
       # @return [void]
       def clear!
@@ -79,10 +80,7 @@ module RubyRoutes
         @cache_hits = 0
         @cache_misses = 0
         @radix_tree = RadixTree.new
-        @request_key_pool.clear
-        @request_key_ring.fill(nil)
-        @entry_count = 0
-        @ring_index = 0
+        RubyRoutes::Utility::KeyBuilderUtility.clear!
       end
 
       # Get the number of routes.

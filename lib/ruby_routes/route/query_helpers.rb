@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require 'rack'
+require 'rack/utils'
 
 module RubyRoutes
   class Route
@@ -43,12 +43,12 @@ module RubyRoutes
         query_part = path[(query_index + 1)..]
         return RubyRoutes::Constant::EMPTY_HASH if query_part.empty? || query_part.match?(/^\?+$/)
 
-        if (cached_result = @query_cache.get(query_part))
+        if (cached_result = @cache_mutex.synchronize { @query_cache.get(query_part) })
           return cached_result
         end
 
         parsed_result = Rack::Utils.parse_query(query_part)
-        @query_cache.set(query_part, parsed_result)
+        @cache_mutex.synchronize { @query_cache.set(query_part, parsed_result) }
         parsed_result
       end
     end

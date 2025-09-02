@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'timeout'
 require_relative '../constant'
 
 module RubyRoutes
@@ -25,6 +26,7 @@ module RubyRoutes
 
           validate_constraint_for(rule, key, params[param_key])
         end
+        nil
       end
 
       # Dispatch a single constraint check.
@@ -51,8 +53,20 @@ module RubyRoutes
       # @param value [Object] The value to validate.
       # @return [void]
       def validate_builtin_constraint(rule, value)
-        method_sym = RubyRoutes::Constant::BUILTIN_VALIDATORS[rule.to_sym] if rule
-        send(method_sym, value) if method_sym
+        case rule.to_s
+        when 'int'
+          validate_int_constraint(value)
+        when 'uuid'
+          validate_uuid_constraint(value)
+        when 'email'
+          validate_email_constraint(value)
+        when 'slug'
+          validate_slug_constraint(value)
+        when 'alpha'
+          validate_alpha_constraint(value)
+        when 'alphanumeric'
+          validate_alphanumeric_constraint(value)
+        end
       end
 
       # Validate a regexp constraint.
