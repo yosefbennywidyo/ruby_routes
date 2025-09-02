@@ -78,9 +78,9 @@ module RubyRoutes
       # @param method_input [String] The HTTP method input.
       # @return [String] The normalized HTTP method.
       def normalize_string_method(method_input)
-        key = method_input
-        return key if already_upper_ascii?(key)
+        return method_input if already_upper_ascii?(method_input)
 
+        key = method_input.dup
         METHOD_CACHE[key] ||= ascii_upcase(key).freeze
       end
 
@@ -98,9 +98,9 @@ module RubyRoutes
       # @return [String] The normalized HTTP method.
       def normalize_other_method(method_input)
         coerced = method_input.to_s
-        key = coerced
-        return key if already_upper_ascii?(key)
+        return coerced if already_upper_ascii?(coerced)
 
+        key = coerced.dup
         METHOD_CACHE[key] ||= ascii_upcase(key).freeze
       end
 

@@ -4,8 +4,6 @@ module RubyRoutes
   class RadixTree
     # Inserter module for adding routes to the RadixTree.
     # Handles tokenization, node advancement, and endpoint finalization.
-    #
-    # @module RubyRoutes::RadixTree::Inserter
     module Inserter
       private
 
@@ -19,7 +17,7 @@ module RubyRoutes
         return route_handler if path_string.nil? || path_string.empty?
 
         tokens = split_path(path_string)
-        current_node = @root_node
+        current_node = @root
         tokens.each { |token| current_node = advance_node(current_node, token) }
         finalize_endpoint(current_node, http_methods, route_handler)
         route_handler

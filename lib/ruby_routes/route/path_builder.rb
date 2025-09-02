@@ -3,8 +3,6 @@
 module RubyRoutes
   class Route
     # PathBuilder: generation + segment encoding
-    #
-    # @module RubyRoutes::Route::PathBuilder
     module PathBuilder
       private
 

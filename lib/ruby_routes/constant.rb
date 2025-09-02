@@ -28,7 +28,7 @@ module RubyRoutes
   # @api internal
   module Constant
     # Shared, canonical root path constant (single source of truth).
-    ROOT_PATH = '/'
+    ROOT_PATH = '/'.freeze
 
     # Maps a segment's first byte (ASCII) to a Segment class.
     #
@@ -119,7 +119,7 @@ module RubyRoutes
     # Empty constants for reuse.
     EMPTY_ARRAY  = [].freeze
     EMPTY_PAIR   = [EMPTY_ARRAY, EMPTY_ARRAY].freeze
-    EMPTY_STRING = ''
+    EMPTY_STRING = ''.freeze
     EMPTY_HASH   = {}.freeze
 
     # Maximum number of distinct (method, path) composite keys retained
@@ -146,7 +146,7 @@ module RubyRoutes
     # Default result for no traversal match.
     #
     # @return [Array]
-    NO_TRAVERSAL_RESULT = [nil, false].freeze
+    NO_TRAVERSAL_RESULT = [nil, false, {}].freeze
 
     # Built-in validators for constraints.
     #

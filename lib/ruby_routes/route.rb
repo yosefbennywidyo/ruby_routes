@@ -3,6 +3,7 @@
 require 'uri'
 require 'timeout'
 require 'rack'
+require 'set'
 require_relative 'constant'
 require_relative 'node'
 require_relative 'route/small_lru'
@@ -35,9 +36,10 @@ module RubyRoutes
   # - Minimal object allocation in hot paths
   #
   # Thread Safety:
-  # - Instance is effectively read‑only after initialization aside from
-  #   internal caches which are not synchronized but safe for typical
-  #   single writer (boot) + many reader (request) usage.
+  # - Instance is effectively read‑only after initialization.
+  # - Internal caches (@query_cache, @gen_cache, @validation_cache) are protected
+  #   by a mutex for safe concurrent access across multiple threads.
+  # - Designed for "build during boot, read per request" usage pattern.
   #
   # Public API Surface (stable):
   # - #match?
@@ -166,6 +168,7 @@ module RubyRoutes
       @is_resource = @path.match?(%r{/:id(?:$|\.)})
       @gen_cache = SmallLru.new(512)
       @query_cache = SmallLru.new(RubyRoutes::Constant::QUERY_CACHE_SIZE)
+      @cache_mutex = Mutex.new  # Thread-safe access to caches
       initialize_validation_cache
       compile_segments
       compile_required_params

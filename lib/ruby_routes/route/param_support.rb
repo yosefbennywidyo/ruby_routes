@@ -12,8 +12,6 @@ module RubyRoutes
     # hashes for performance and includes a 2-slot LRU cache for param key generation.
     #
     # Thread-safety: Thread-local storage is used to avoid allocation and cross-thread mutation.
-    #
-    # @module RubyRoutes::Route::ParamSupport
     module ParamSupport
       include RubyRoutes::Route::WarningHelpers
 
@@ -127,7 +125,7 @@ module RubyRoutes
 
         merge_defaults_fast(params_hash) unless @defaults.empty?
         validate_constraints_fast!(params_hash) unless @constraints.empty?
-        params_hash
+        params_hash.dup
       end
 
       # Merge query parameters (if any) from full path into param hash.

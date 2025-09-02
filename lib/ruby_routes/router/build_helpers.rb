@@ -17,7 +17,6 @@ module RubyRoutes
       def build
         router = Router.new
         validate_calls(@recorded_calls)
-        router.freeze
         router.finalize!
         router
       end

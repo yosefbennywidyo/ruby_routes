@@ -100,10 +100,11 @@ RSpec.describe RubyRoutes::Node do
       segments = %w[users 123]
       params = {}
 
-      result, should_break = node.traverse_for('users', 0, segments, params)
+      result, should_break, captured = node.traverse_for('users', 0, segments, params)
 
       expect(result).to eq(static_child)
       expect(should_break).to be false
+      expect(captured).to eq({}) # Static match doesn't capture params
       expect(params).to be_empty # Static match doesn't capture params
     end
 
@@ -116,10 +117,13 @@ RSpec.describe RubyRoutes::Node do
       segments = %w[users 123]
       params = {}
 
-      result, should_break = node.traverse_for('123', 0, segments, params)
+      result, should_break, captured = node.traverse_for('123', 0, segments, params)
 
       expect(result).to eq(dynamic_child)
       expect(should_break).to be false
+      expect(captured).to eq({ 'id' => '123' })
+      # Apply captured params to simulate what the finder does
+      params.merge!(captured)
       expect(params['id']).to eq('123')
     end
 
@@ -132,10 +136,13 @@ RSpec.describe RubyRoutes::Node do
       segments = ['files', 'docs', 'readme.txt']
       params = {}
 
-      result, should_break = node.traverse_for('docs', 1, segments, params)
+      result, should_break, captured = node.traverse_for('docs', 1, segments, params)
 
       expect(result).to eq(wildcard_child)
       expect(should_break).to be true # Wildcard breaks traversal
+      expect(captured).to eq({ 'path' => 'docs/readme.txt' })
+      # Apply captured params to simulate what the finder does
+      params.merge!(captured)
       expect(params['path']).to eq('docs/readme.txt')
     end
 
@@ -148,10 +155,13 @@ RSpec.describe RubyRoutes::Node do
       segments = ['uploads', 'image.jpg']
       params = {}
 
-      result, should_break = node.traverse_for('image.jpg', 1, segments, params)
+      result, should_break, captured = node.traverse_for('image.jpg', 1, segments, params)
 
       expect(result).to eq(wildcard_child)
       expect(should_break).to be true
+      expect(captured).to eq({ 'file' => 'image.jpg' }) # Single segment, no join
+      # Apply captured params to simulate what the finder does
+      params.merge!(captured)
       expect(params['file']).to eq('image.jpg') # Single segment, no join
     end
 
@@ -167,11 +177,12 @@ RSpec.describe RubyRoutes::Node do
       segments = %w[users new]
       params = {}
 
-      result, should_break = node.traverse_for('new', 1, segments, params)
+      result, should_break, captured = node.traverse_for('new', 1, segments, params)
 
       # Should match static, not dynamic
       expect(result).to eq(static_child)
       expect(should_break).to be false
+      expect(captured).to eq({}) # No dynamic capture
       expect(params).to be_empty # No dynamic capture
     end
 
@@ -183,10 +194,11 @@ RSpec.describe RubyRoutes::Node do
 
       segments = %w[users 123]
 
-      result, should_break = node.traverse_for('123', 0, segments, nil)
+      result, should_break, captured = node.traverse_for('123', 0, segments, nil)
 
       expect(result).to eq(dynamic_child)
       expect(should_break).to be false
+      expect(captured).to eq({ 'id' => '123' })
       # Should not crash when params is nil
     end
 

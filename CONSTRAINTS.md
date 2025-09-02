@@ -4,34 +4,36 @@ Ruby Routes provides a comprehensive constraint system to validate route paramet
 
 ## Built-in Constraint Types
 
-### Basic Types
-
 ```ruby
-# Integer validation
-route '/users/:id', to: 'users#show', constraints: { id: :int }
-
-# UUID validation  
-route '/resources/:uuid', to: 'resources#show', constraints: { uuid: :uuid }
-
-# Email validation
-route '/users/:email', to: 'users#show', constraints: { email: :email }
-
-# URL-friendly slug validation (lowercase letters, numbers, hyphens)
-route '/posts/:slug', to: 'posts#show', constraints: { slug: :slug }
-
-# Alphabetic characters only
-route '/categories/:name', to: 'categories#show', constraints: { name: :alpha }
-
-# Alphanumeric characters only
-route '/codes/:code', to: 'codes#show', constraints: { code: :alphanumeric }
+router = RubyRoutes.draw do
+  # Integer validation
+  get '/users/:id', to: 'users#show', constraints: { id: :int }
+  
+  # UUID validation  
+  get '/resources/:uuid', to: 'resources#show', constraints: { uuid: :uuid }
+  
+  # Email validation
+  get '/users/:email', to: 'users#show', constraints: { email: :email }
+  
+  # Slug validation (lowercase letters, numbers, hyphens)
+  get '/posts/:slug', to: 'posts#show', constraints: { slug: :slug }
+  
+  # Alphabetic characters only (allows uppercase)
+  get '/categories/:name', to: 'categories#show', constraints: { name: :alpha }
+  
+  # Alphanumeric characters only (allows uppercase)
+  get '/codes/:code', to: 'codes#show', constraints: { code: :alphanumeric }
+end
 ```
 
-### Regular Expression Constraints
+## Regular Expression Constraints
 
 ```ruby
-# Custom regex pattern
-route '/products/:sku', to: 'products#show', 
-      constraints: { sku: /\A[A-Z]{2}\d{4}\z/ }
+router = RubyRoutes.draw do
+  # Custom regex pattern
+  get '/products/:sku', to: 'products#show', 
+        constraints: { sku: /\A[A-Z]{2}\d{4}\z/ }
+end
 ```
 
 ### Hash-based Constraints (Recommended)
@@ -39,43 +41,37 @@ route '/products/:sku', to: 'products#show',
 Hash constraints provide powerful validation options without security risks:
 
 ```ruby
-# Length constraints
-route '/users/:username', to: 'users#show',
-      constraints: { 
-        username: { 
-          min_length: 3, 
-          max_length: 20,
-          format: /\A[a-zA-Z0-9_]+\z/
-        } 
-      }
+router = RubyRoutes.draw do
+  # Length constraints
+  get '/users/:username', to: 'users#show',
+        constraints: { 
+          username: { 
+            min_length: 3, 
+            max_length: 20,
+            format: /\A[a-zA-Z0-9_]+\z/
+          } 
+        }
 
-# Allowed values (whitelist)
-route '/posts/:status', to: 'posts#show',
-      constraints: { 
-        status: { in: %w[draft published archived] }
-      }
+  # Allowed values (whitelist)
+  get '/posts/:status', to: 'posts#show',
+        constraints: { status: { in: %w[draft published archived] } }
 
-# Forbidden values (blacklist)  
-route '/users/:username', to: 'users#show',
-      constraints: { 
-        username: { not_in: %w[admin root system] }
-      }
+  # Forbidden values (blacklist)  
+  get '/users/:username', to: 'users#show',
+        constraints: { username: { not_in: %w[admin root system] } }
 
-# Numeric ranges
-route '/products/:price', to: 'products#show',
-      constraints: { 
-        price: { range: 1..10000 }
-      }
+  # Numeric ranges
+  get '/products/:price', to: 'products#show',
+        constraints: { price: { range: 1..10000 } }
 
-# Multiple constraints
-route '/api/:version/users/:id', to: 'api/users#show',
-      constraints: {
-        version: { in: %w[v1 v2 v3] },
-        id: { range: 1..999999, format: /\A\d+\z/ }
-      }
-```
-
-## Security Considerations
+  # Multiple constraints
+  get '/api/:version/users/:id', to: 'api/users#show',
+        constraints: {
+          version: { in: %w[v1 v2 v3] },
+          id: { range: 1..999999, format: /\A\d+\z/ }
+        }
+end
+```## Security Considerations
 
 ### ⚠️ Deprecated: Proc Constraints
 
@@ -83,11 +79,12 @@ route '/api/:version/users/:id', to: 'api/users#show',
 
 ```ruby
 # ❌ DEPRECATED - Security risk!
-route '/users/:id', to: 'users#show',
+get '/users/:id', to: 'users#show',
       constraints: { id: ->(value) { value.to_i > 0 } }
 ```
 
 **Why Proc constraints are dangerous:**
+
 - Can execute arbitrary code
 - Vulnerable to code injection attacks
 - Can cause denial of service
@@ -98,17 +95,19 @@ route '/users/:id', to: 'users#show',
 Instead of Proc constraints, use:
 
 ```ruby
-# ✅ Use hash constraints with ranges
-route '/users/:id', to: 'users#show',
-      constraints: { id: { range: 1..Float::INFINITY } }
+router = RubyRoutes.draw do
+  # ✅ Use hash constraints with ranges
+  get '/users/:id', to: 'users#show',
+        constraints: { id: { range: 1..Float::INFINITY } }
 
-# ✅ Use regex patterns  
-route '/users/:id', to: 'users#show',
-      constraints: { id: /\A[1-9]\d*\z/ }
+  # ✅ Use regex patterns  
+  get '/users/:id', to: 'users#show',
+        constraints: { id: /\A[1-9]\d*\z/ }
 
-# ✅ Use built-in types
-route '/users/:id', to: 'users#show',
-      constraints: { id: :int }
+  # ✅ Use built-in types
+  get '/users/:id', to: 'users#show',
+        constraints: { id: :int }
+end
 ```
 
 ## Hash Constraint Options
@@ -127,8 +126,13 @@ route '/users/:id', to: 'users#show',
 When constraints fail, a `RubyRoutes::ConstraintViolation` exception is raised:
 
 ```ruby
+router = RubyRoutes.draw do
+  get '/users/:id', to: 'users#show', constraints: { id: :int }
+end
+
 begin
-  route.extract_params('/users/invalid')
+  result = router.route_set.match('GET', '/users/invalid')
+  # Process result
 rescue RubyRoutes::ConstraintViolation => e
   # Handle constraint violation
   puts e.message
@@ -160,5 +164,6 @@ constraints: { name: { min_length: 3, format: /\A[a-z]+\z/ } }
 
 - Built-in constraints (`:int`, `:uuid`, etc.) are highly optimized
 - Hash constraints are fast and secure
-- Regex constraints have ReDoS protection with automatic timeouts
+- Regex constraints have ReDoS protection with automatic timeouts (100ms)
+- Proc constraints have timeout protection (50ms) but are deprecated
 - All constraints are validated before reaching your application code

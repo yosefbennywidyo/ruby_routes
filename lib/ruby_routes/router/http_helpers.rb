@@ -108,7 +108,7 @@ module RubyRoutes
       # @raise [RuntimeError] If the router is frozen.
       # @return [void]
       def ensure_unfrozen!
-        raise 'Router finalized (immutable)' if @frozen
+        raise 'Router finalized (immutable)' if @frozen || frozen?
       end
 
       # Define routes for a singular resource.

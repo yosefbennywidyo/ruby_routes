@@ -39,7 +39,9 @@ module RubyRoutes
       def ensure_child(parent_node)
         parent_node.wildcard_child ||= Node.new
         wildcard_child_node = parent_node.wildcard_child
-        wildcard_child_node.param_name = @param_name
+        if wildcard_child_node.param_name.nil?
+          wildcard_child_node.param_name = @param_name
+        end
         wildcard_child_node
       end
 

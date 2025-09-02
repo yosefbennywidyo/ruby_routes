@@ -14,9 +14,7 @@ module RubyRoutes
     # Design goals:
     # - Zero garbage on hot cache hits.
     # - Bounded memory (REQUEST_KEY_CAPACITY ring).
-    # - Thread safety not required (intended for single request thread use).
-    #
-    # @module RubyRoutes::Utility::KeyBuilderUtility
+    # - Thread-safe for concurrent access across multiple threads.
     module KeyBuilderUtility
       # @!visibility private
       # { "GET" => { "/users" => "GET:/users" } }
@@ -28,12 +26,21 @@ module RubyRoutes
       @ring_index  = 0
       # @!visibility private
       @entry_count = 0
+      # @!visibility private
+      @mutex = Mutex.new
 
       class << self
-        # Expose pool for diagnostics (read‑only).
+        # Clear all cached request keys.
         #
-        # @return [Hash] A shallow copy of the request key pool for diagnostics.
-        attr_reader :request_key_pool
+        # @return [void]
+        def clear!
+          @mutex.synchronize do
+            @request_key_pool.clear
+            @request_key_ring.fill(nil)
+            @entry_count = 0
+            @ring_index = 0
+          end
+        end
 
         # Fetch (or create) a frozen "METHOD:PATH" composite key.
         #
@@ -46,12 +53,14 @@ module RubyRoutes
         # @param request_path [String] The request path (e.g., "/users").
         # @return [String] A frozen canonical key.
         def fetch_request_key(http_method, request_path)
-          method_key, path_key = prepare_keys(http_method, request_path)
+          @mutex.synchronize do
+            method_key, path_key = prepare_keys(http_method, request_path)
 
-          bucket = @request_key_pool[method_key] ||= {}
-          return bucket[path_key] if bucket[path_key]
+            bucket = @request_key_pool[method_key] ||= {}
+            return bucket[path_key] if bucket[path_key]
 
-          handle_cache_miss(bucket, method_key, path_key)
+            handle_cache_miss(bucket, method_key, path_key)
+          end
         end
 
         private
@@ -116,7 +125,7 @@ module RubyRoutes
 
       # Build a generic delimited key from components (non‑hot path).
       #
-      # Uses a thread‑local mutable buffer to avoid transient objects.
+      # Simple join; acceptable for non‑hot paths.
       #
       # @param components [Array<#to_s>] The components to join into a key.
       # @param delimiter [String] The separator (default is ':').
@@ -159,8 +168,16 @@ module RubyRoutes
       # @param buffer [String] The buffer to build the key into.
       # @return [void]
       def build_param_key_buffer(required_params, merged, buffer)
-        key_components = required_params.map { |param| format_param_value(merged[param]) }
-        buffer << key_components.join('|')
+        first = true
+        required_params.each do |param|
+          value = format_param_value(merged[param])
+          if first
+            buffer << value
+            first = false
+          else
+            buffer << '|' << value
+          end
+        end
       end
 
       # Format a parameter value for inclusion in the key.

@@ -4,7 +4,7 @@ A high-performance, lightweight routing system for Ruby applications providing a
 
 ## Features
 
-- **🚀 High Performance**: 40x faster routing with 99.99% cache hit rate
+- **🚀 High Performance**: Fast routing with 99.99% cache hit rate
 - **🔄 Rails-like DSL**: Familiar syntax for defining routes
 - **🛣️ RESTful Resources**: Automatic generation of RESTful routes
 - **🔒 Secure Constraints**: Built-in security with comprehensive constraint system
@@ -36,7 +36,7 @@ A high-performance, lightweight routing system for Ruby applications providing a
 Add this line to your application's Gemfile:
 
 ```ruby
-gem 'ruby_routes', '~> 2.1.0'
+gem 'ruby_routes', '~> 2.3.0'
 ```
 
 And then execute:
@@ -358,6 +358,7 @@ Rack::Handler::WEBrick.run RubyRoutesApp.new, Port: 9292
 - `scope(options = {})` - Group routes with shared options
 - `concern(name, &block)` - Define a reusable route concern
 - `concerns(names)` - Use defined concerns in the current context
+- `build(&block)` - Create a thread-safe, finalized router by accumulating routes in a builder
 
 ### RouteSet Methods
 
@@ -370,7 +371,7 @@ Rack::Handler::WEBrick.run RubyRoutesApp.new, Port: 9292
 
 Ruby Routes is optimized for high-performance applications:
 
-- **40x faster** routing compared to many alternatives
+- **Fast** routing
 - **99.99% cache hit rate** for common access patterns
 - **Low memory footprint** with bounded caches and object reuse
 - **Zero memory leaks** in long-running applications
@@ -388,30 +389,36 @@ Performance metrics (from `benchmark/` directory):
 Ruby Routes prioritizes security with these protections:
 
 ### 🔒 Security Features
-- **XSS Protection**: All HTML output is properly escaped
+
 - **ReDoS Protection**: Regular expression constraints have timeout protection
 - **Secure Constraints**: Type-safe constraint system without code execution
 - **Thread Safety**: All shared resources are thread-safe
 - **Input Validation**: Comprehensive parameter validation
 
 ### ⚠️ Security Notice
+
 **Proc constraints are deprecated due to security risks** and will be removed in a future version. They allow arbitrary code execution which can be exploited for:
+
 - Code injection attacks
 - Denial of service attacks
 - System compromise
 
 **Migration Required**: If you're using Proc constraints, please migrate to secure alternatives using our [Migration Guide](MIGRATION_GUIDE.md).
 
+**Note**: RubyRoutes is a routing library and does not provide application-level security features such as XSS protection, CSRF protection, or authentication. These should be handled by your web framework or additional security middleware.
+
 ## Documentation
 
 ### Core Documentation
+
 - **[CONSTRAINTS.md](CONSTRAINTS.md)** - Complete guide to route constraints and security
 - **[MIGRATION_GUIDE.md](MIGRATION_GUIDE.md)** - Guide for migrating from deprecated Proc constraints
-- **[SECURITY_FIXES.md](SECURITY_FIXES.md)** - Details on security improvements
 - **[USAGE.md](USAGE.md)** - Extended usage scenarios
 
 ### Examples
+
 See the `examples/` directory for more detailed examples:
+
 - `examples/basic_usage.rb` - Basic routing examples
 - `examples/rack_integration.rb` - Full Rack application example
 - `examples/constraints.rb` - Route constraint examples

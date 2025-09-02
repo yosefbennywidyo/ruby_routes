@@ -459,7 +459,8 @@ RSpec.describe RubyRoutes::Route do
 
     it 'accepts route with controller option' do
       expect do
-        RubyRoutes::RadixTree.new('/valid', controller: 'pages', action: 'show')
+        RubyRoutes::RadixTree.new('/valid', controller: 'pages', action: 'show'
+        )
       end.not_to raise_error
     end
 
@@ -782,6 +783,99 @@ RSpec.describe RubyRoutes::Route do
         result = route.send(:get_cached_validation, params)
         expect(result).to be_nil
       end
+    end
+  end
+
+  describe 'thread safety' do
+    let(:route) { RubyRoutes::Route.new('/users/:id', to: 'users#show') }
+
+    it 'is thread-safe for query parameter caching' do
+      threads = []
+      results = []
+      mutex = Mutex.new
+
+      # Create multiple threads that access the same route simultaneously
+      10.times do |i|
+        threads << Thread.new do
+          path = "/users/123?name=test#{i}&value=#{i}"
+          result = route.send(:query_params_fast, path)
+          mutex.synchronize { results << result }
+        end
+      end
+
+      threads.each(&:join)
+
+      # All results should be correct
+      results.each_with_index do |result, i|
+        expect(result).to eq({ 'name' => "test#{i}", 'value' => i.to_s })
+      end
+    end
+
+    it 'is thread-safe for path generation caching' do
+      threads = []
+      results = []
+      mutex = Mutex.new
+
+      # Create multiple threads that generate paths simultaneously
+      10.times do |i|
+        threads << Thread.new do
+          params = { id: i.to_s }
+          result = route.generate_path(params)
+          mutex.synchronize { results << result }
+        end
+      end
+
+      threads.each(&:join)
+
+      # All results should be correct
+      results.each_with_index do |result, i|
+        expect(result).to eq("/users/#{i}")
+      end
+    end
+
+    it 'is thread-safe for constraint validation caching' do
+      route_with_constraints = RubyRoutes::Route.new('/users/:id', to: 'users#show', constraints: { id: :int })
+      threads = []
+      results = []
+      mutex = Mutex.new
+
+      # Create multiple threads that validate constraints simultaneously
+      10.times do
+        threads << Thread.new do
+          params = { 'id' => '123' }.freeze
+          result = route_with_constraints.send(:validate_constraints_fast!, params)
+          mutex.synchronize { results << result }
+        end
+      end
+
+      threads.each(&:join)
+
+      # All validations should pass without errors
+      expect(results).to all(be_nil)
+    end
+  end
+
+  describe 'required params validation caching' do
+    let(:route) { RubyRoutes::Route.new('/users/:id', to: 'users#show') }
+
+    it 'validates required params once per params, not globally' do
+      # Assume the route has required params (e.g., 'id' from the path)
+      # This is a simplified test; in practice, ensure @required_params is populated.
+
+      # First call with valid params - should pass
+      valid_params = { 'id' => '123' }.freeze
+      expect { route.send(:validate_required_once, valid_params) }.not_to raise_error
+
+      # Second call with different invalid params - should fail (bug: before fix, it passes)
+      invalid_params = { 'id' => nil }.freeze
+      expect { route.send(:validate_required_once, invalid_params) }.to raise_error(RubyRoutes::RouteNotFound, /Missing or nil params/)
+
+      # Third call with same valid params - should pass (uses cache after fix)
+      expect { route.send(:validate_required_once, valid_params) }.not_to raise_error
+
+      # Fourth call with non-frozen invalid params - should fail (no caching, re-validates)
+      non_frozen_invalid = { 'id' => nil }
+      expect { route.send(:validate_required_once, non_frozen_invalid) }.to raise_error(RubyRoutes::RouteNotFound, /Missing or nil params/)
     end
   end
 end

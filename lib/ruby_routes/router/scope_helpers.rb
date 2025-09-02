@@ -61,7 +61,21 @@ module RubyRoutes
       # @param scoped_path [String] The path to prepend the scope's path to.
       # @return [void]
       def apply_path_scope(scope, scoped_path)
-        scoped_path.prepend(scope[:path]) if scope[:path]
+        path = scope[:path]&.to_s
+        return if path.nil? || path.empty?
+
+        if path.end_with?('/')
+          if scoped_path.start_with?('/')
+            scoped_path.prepend(path.chomp('/'))
+          else
+            scoped_path.prepend(path)
+          end
+        else
+          scoped_path.prepend(scoped_path.start_with?('/') ? path : "#{path}/")
+        end
+
+        # Normalize: Ensure the final path starts with '/'
+        scoped_path.prepend('/') unless scoped_path.start_with?('/')
       end
 
       # Apply the module from a scope to the given options.
@@ -73,13 +87,17 @@ module RubyRoutes
       # @param scoped_options [Hash] The options to update with the module.
       # @return [void]
       def apply_module_scope(scope, scoped_options)
-        return unless scope[:module]
+        module_string = scope[:module]&.to_s
+        return if module_string.nil? || module_string.empty?
 
-        if scoped_options[:to]
-          controller, action = scoped_options[:to].to_s.split('#', 2)
-          scoped_options[:to] = "#{scope[:module]}/#{controller}##{action}"
-        elsif scoped_options[:controller]
-          scoped_options[:controller].prepend("#{scope[:module]}/")
+        if (to_val = scoped_options[:to])
+          controller, action = to_val.to_s.split('#', 2)
+          return if controller.nil? || controller.empty?
+          scoped_options[:to] = action && !action.empty? ? "#{module_string}/#{controller}##{action}" : "#{module_string}/#{controller}"
+        elsif (controller = scoped_options[:controller])
+          controller_string = controller.to_s
+          return if controller_string.empty?
+          scoped_options[:controller] = "#{module_string}/#{controller_string}"
         end
       end
 
@@ -91,7 +109,7 @@ module RubyRoutes
       def apply_defaults_scope(scope, scoped_options)
         return unless scope[:defaults]
 
-        scoped_options[:defaults] = (scoped_options[:defaults] || {}).merge(scope[:defaults])
+        scoped_options[:defaults] = scope[:defaults].merge(scoped_options[:defaults] || {})
       end
 
       # Apply the constraints from a scope to the given options.
@@ -102,7 +120,7 @@ module RubyRoutes
       def apply_constraints_scope(scope, scoped_options)
         return unless scope[:constraints]
 
-        scoped_options[:constraints] = (scoped_options[:constraints] || {}).merge(scope[:constraints])
+        scoped_options[:constraints] = scope[:constraints].merge(scoped_options[:constraints] || {})
       end
     end
   end

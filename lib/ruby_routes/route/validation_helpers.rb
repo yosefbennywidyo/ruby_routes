@@ -39,19 +39,31 @@ module RubyRoutes
       # Validate required parameters once.
       #
       # This method validates that all required parameters are present and not
-      # nil. It ensures that validation is performed only once per request.
+      # nil. It uses per-params caching to avoid re-validation for the same
+      # frozen params.
       #
       # @param params [Hash] The parameters to validate.
       # @raise [RouteNotFound] If required parameters are missing or nil.
       # @return [void]
       def validate_required_once(params)
-        return if @required_params.empty? || @required_validated_once
+        return if @required_params.empty?
 
-        missing, nils = validate_required_params(params)
+        # Check cache for existing validation result
+        cached_result = get_cached_validation(params)
+        if cached_result
+          missing, nils = cached_result
+        else
+          # Perform validation
+          missing, nils = validate_required_params(params)
+          # Cache the result only if params are frozen
+          if params.frozen?
+            cache_validation_result(params, [missing, nils])
+          end
+        end
+
+        # Raise if invalid
         raise RouteNotFound, "Missing params: #{missing.join(', ')}" unless missing.empty?
         raise RouteNotFound, "Missing or nil params: #{nils.join(', ')}" unless nils.empty?
-
-        @required_validated_once = true
       end
 
       # Validate required parameters.
@@ -64,13 +76,20 @@ module RubyRoutes
       #   - `nils` [Array<String>] The keys of parameters that are nil.
       def validate_required_params(params)
         return RubyRoutes::Constant::EMPTY_PAIR if @required_params.empty?
+        params ||= {}
+
+        if (cached = get_cached_validation(params))
+          return cached
+        end
 
         missing = []
         nils = []
         @required_params.each do |required_key|
           process_required_key(required_key, params, missing, nils)
         end
-        [missing, nils]
+        result = [missing, nils]
+        cache_validation_result(params, result)
+        result
       end
 
       # Per-key validation helper used by `validate_required_params`.
@@ -85,10 +104,13 @@ module RubyRoutes
       def process_required_key(required_key, params, missing, nils)
         if params.key?(required_key)
           nils << required_key if params[required_key].nil?
-        elsif params.key?(symbol_key = required_key.to_sym)
-          nils << required_key if params[symbol_key].nil?
         else
-          missing << required_key
+          symbol_key = required_key.to_sym
+          if params.key?(symbol_key)
+            nils << required_key if params[symbol_key].nil?
+          else
+            missing << required_key
+          end
         end
       end
 
@@ -104,7 +126,7 @@ module RubyRoutes
         return unless params.frozen?
         return unless @validation_cache && @validation_cache.size < 64
 
-        @validation_cache.set(params.hash, result)
+        @cache_mutex.synchronize { @validation_cache.set(params.hash, result) }
       end
 
       # Fetch cached validation result.
@@ -114,7 +136,8 @@ module RubyRoutes
       # @param params [Hash] The parameters used for validation.
       # @return [Object, nil] The cached validation result, or `nil` if not found.
       def get_cached_validation(params)
-        @validation_cache&.get(params.hash)
+        return nil unless params && @validation_cache
+        @cache_mutex.synchronize { @validation_cache.get(params.hash) }
       end
 
       # Return hash to pool.
