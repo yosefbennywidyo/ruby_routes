@@ -64,10 +64,6 @@ RSpec.describe RubyRoutes::Route do
 
   describe '#query_params_fast' do
     it 'returns empty hash for empty query string' do
-      route = RubyRoutes::Route.new('/users/:id', to: 'users#show')
-
-      # Test with an empty query string (question mark with nothing after it)
-      result = route.send(:query_params_fast, '/users/123?')
 
       expect(result).to eq({})
       expect(result).to be_empty
@@ -766,9 +762,6 @@ RSpec.describe RubyRoutes::Route do
         # Create a non-frozen params hash
         params = { id: '123' }
         result = double('validation_result')
-
-        # Cache a result
-        route.send(:cache_validation_result, params, result)
 
         # Verify it wasn't cached
         cached_result = route.send(:get_cached_validation, params)

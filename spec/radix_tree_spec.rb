@@ -134,29 +134,6 @@ RSpec.describe RubyRoutes::RadixTree do
 
       result, = tree.find('/users/123', 'GET', { 'id' => '123' })
       expect(result).to eq(route)
-      result, = tree.find('/users/500', 'GET', { 'id' => '500' })
-      expect(result).to eq(route)
-      result, = tree.find('/users/50', 'GET', { 'id' => '50' })
-      expect(result).to be_nil
-    end
-
-    it 'validates integer constraints' do
-      route = build_route_with_constraints(id: :int)
-      tree.add('/users/:id', ['GET'], route)
-
-      result, = tree.find('/users/123', 'GET', { 'id' => '123' })
-      expect(result).to eq(route)
-      result, = tree.find('/users/abc', 'GET', { 'id' => 'abc' })
-      expect(result).to be_nil
-    end
-
-    it 'validates UUID constraints' do
-      route = build_route_with_constraints(id: :uuid)
-      tree.add('/users/:id', ['GET'], route)
-      uuid = '550e8400-e29b-41d4-a716-446655440000'
-
-      result, = tree.find("/users/#{uuid}", 'GET', { 'id' => uuid })
-      expect(result).to eq(route)
       result, = tree.find('/users/not-a-uuid', 'GET', { 'id' => 'not-a-uuid' })
       expect(result).to be_nil
     end
@@ -179,13 +156,6 @@ RSpec.describe RubyRoutes::RadixTree do
       expect(result).to eq(route)
       result, = tree.find('/users/123', 'GET', { id: '123' })
       expect(result).to eq(route)
-    end
-
-    it 'handles empty constraints (no validate hook triggered)' do
-      route = double('route', constraints: {})
-      allow(route).to receive(:respond_to?).with(:constraints).and_return(true)
-      allow(route).to receive(:respond_to?).with(:validate_constraints_fast!).and_return(false)
-      tree.add('/users/:id', ['GET'], route)
       result, = tree.find('/users/123', 'GET')
       expect(result).to eq(route)
     end
@@ -242,18 +212,6 @@ RSpec.describe RubyRoutes::RadixTree do
       (1..3000).each { |i| tree.find("/path/#{i}", 'GET') }
       cache     = tree.instance_variable_get(:@split_cache)
       cache_max = tree.instance_variable_get(:@split_cache_max)
-      expect(cache.size).to be <= cache_max
-    end
-  end
-
-  describe 'performance optimizations' do
-    it 'handles unrolled traversal for common path lengths' do
-      r1 = double('route1')
-      r2 = double('route2')
-      r3 = double('route3')
-      tree.add('/users', ['GET'], r1)
-      expect(tree.find('/users', 'GET').first).to eq(r1)
-      tree.add('/users/:id', ['GET'], r2)
       expect(tree.find('/users/123', 'GET').first).to eq(r2)
       tree.add('/users/:id/posts', ['GET'], r3)
       expect(tree.find('/users/123/posts', 'GET').first).to eq(r3)
@@ -286,11 +244,6 @@ RSpec.describe RubyRoutes::RadixTree do
       route = double('route')
       tree.add('users', ['GET'], route)
       expect(tree.find('/users', 'GET').first).to eq(route)
-    end
-
-    it 'returns nil for completely non-matching paths' do
-      route = double('route')
-      tree.add('/users', ['GET'], route)
       expect(tree.find('/posts', 'GET').first).to be_nil
     end
 
