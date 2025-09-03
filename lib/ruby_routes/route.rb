@@ -145,8 +145,9 @@ module RubyRoutes
     # @param options [Hash] The options for the route.
     # @return [String, nil] The inferred controller name.
     def extract_controller(options)
+      return options[:controller] if options[:controller]
       to = options[:to]
-      return options[:controller] unless to
+      return nil unless to
 
       to.to_s.split('#', 2).first
     end

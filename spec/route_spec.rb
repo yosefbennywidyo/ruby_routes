@@ -878,4 +878,31 @@ RSpec.describe RubyRoutes::Route do
       expect { route.send(:validate_required_once, non_frozen_invalid) }.to raise_error(RubyRoutes::RouteNotFound, /Missing or nil params/)
     end
   end
+
+  describe RubyRoutes::Route do
+    describe '#initialize' do
+      context 'when explicit controller is provided' do
+        it 'overrides the controller from :to option' do
+          route = described_class.new('/users/:id', to: 'posts#show', controller: 'users')
+
+          expect(route.controller).to eq('users')
+          expect(route.action).to eq('show')  # Action should still come from :to
+        end
+
+        it 'uses explicit controller even when :to has different controller' do
+          route = described_class.new('/posts/:id', to: 'posts#index', controller: 'admin')
+
+          expect(route.controller).to eq('admin')
+          expect(route.action).to eq('index')
+        end
+
+        it 'ignores :to controller when explicit controller is nil' do
+          route = described_class.new('/users', to: 'users#index', controller: nil)
+
+          expect(route.controller).to eq('users')  # Falls back to :to
+          expect(route.action).to eq('index')
+        end
+      end
+    end
+  end
 end
