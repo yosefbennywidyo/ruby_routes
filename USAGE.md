@@ -280,6 +280,9 @@ class IoTRouter
       post '/devices/:device_id/sensors/:sensor_type', to: 'sensors#record'
       post '/devices/:device_id/commands/:command', to: 'devices#execute'
       get '/devices/:device_id/status', to: 'devices#status'
+    end
+  end
+
   def route_device_message(device_id, message_type, payload, method: 'POST')
     path = "/devices/#{device_id}/#{message_type}"
     route = @router.route_set.match(method, path)
@@ -287,11 +290,8 @@ class IoTRouter
     DeviceHandler.new.process(route[:action], route[:params], payload)
   end
 end
-    
-    DeviceHandler.new.process(route[:action], route[:params], payload)
-  end
-end
 ```
+
 
 ## 🔍 **Specialized Use Cases**
 
