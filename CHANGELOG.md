@@ -13,7 +13,7 @@
 ## 2.3.0 - 2025-09-02
 
 - **Refactoring**: Improved code organization, naming, and maintainability across router, route, segment, and utility modules.
-- **Documentation***: Enhanced documentation for clarity and consistency in UrlHelpers, Constant module, and other modules.
+- **Documentation**: Enhanced documentation for clarity and consistency in UrlHelpers, Constant module, and other modules.
 - **Performance**: Optimizations in caching strategies, parameter handling, and HTTP method normalization.
 - **Additions**: New utility modules (InflectorUtility, MethodUtility), constants, and comprehensive tests.
 - **Fixes**: Bug fixes in route insertion, constraint validation, and parameter handling.
@@ -90,7 +90,7 @@
 - **Performance**: use radix-tree params directly in `RubyRoutes::RouteSet#match` to avoid reparsing paths.
 - **Performance**: faster path-splitting in `RubyRoutes::RadixTree#find`.
 - **Path generation**: tokenized templates + bounded LRU cache `RubyRoutes::Route#generate_path`.
-- **Caching***: adaptive small LRU to avoid thrash (`RubyRoutes::Route::SmallLru`).
+- **Caching**: adaptive small LRU to avoid thrash (`RubyRoutes::Route::SmallLru`).
 - **Encoding**: cheap safe-ASCII test before `URI.encode_www_form_component`.
 - **Constraint checks**: lightweight checks moved into tree traversal for early rejection.
 - **Misc**: avoid repeated string upcasing in `RubyRoutes::Node#get_handler`.
