@@ -96,7 +96,10 @@ module RubyRoutes
       # @return [Array] [next_node, stop_traversal, segment_captured]
       def traverse_for_segment(node, segment, index, segments, params, captured_params)
         next_node, stop, segment_captured = node.traverse_for(segment, index, segments, params)
-        captured_params.merge!(segment_captured) if segment_captured
+        if segment_captured
+          params.merge!(segment_captured)  # Merge into running params hash at each step
+          captured_params.merge!(segment_captured)  # Keep for best candidate consistency
+        end
         [next_node, stop]
       end
 

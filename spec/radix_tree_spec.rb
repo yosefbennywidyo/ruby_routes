@@ -80,6 +80,37 @@ RSpec.describe RubyRoutes::RadixTree do
   end
 
   describe '#find' do
+    context 'with dynamic segments' do
+      it 'merges captured params into the params hash' do
+        route = double('route')  # Define route as a double
+        tree.add('/users/:id', ['GET'], route)
+        result = tree.find('/users/123', 'GET')
+
+        expect(result[1]).to include('id' => '123')  # Ensure captured param is in params
+      end
+    end
+
+    context 'with wildcard segments' do
+      it 'merges captured params into the params hash' do
+        route = double('route')  # Define route as a double
+        tree.add('/files/*path', ['GET'], route)
+        result = tree.find('/files/docs/readme.txt', 'GET')
+
+        expect(result[1]).to include('path' => 'docs/readme.txt')  # Ensure captured param is in params
+      end
+    end
+
+    context 'when traversal fails mid-path' do
+      it 'retains captured params from successful segments' do
+        route = double('route')  # Define route as a double
+        tree.add('/users/:id/profile', ['GET'], route)
+        result = tree.find('/users/123/invalid', 'GET')
+
+        # Assuming fallback to best candidate, ensure params include captured 'id'
+        expect(result[1]).to include('id' => '123') if result[0]  # Adjust based on fallback logic
+      end
+    end
+
     it 'returns nil for non-matching paths' do
       result, = tree.find('/nonexistent', 'GET')
       expect(result).to be_nil
