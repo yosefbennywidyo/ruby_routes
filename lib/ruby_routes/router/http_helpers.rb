@@ -83,7 +83,12 @@ module RubyRoutes
         via = options[:via]
         raise ArgumentError, 'match requires :via (e.g., via: [:get, :post])' if via.nil? || Array(via).empty?
 
-        add_route(path, options)
+        normalized_via = Array(via)
+        opts = options.dup
+        # Keep :via in opts only if BuildHelpers expects it; otherwise delete.
+        # If BuildHelpers infers from the second arg, delete it:
+        opts.delete(:via)
+        add_route(path, build_route_options(opts, normalized_via))
         self
       end
 

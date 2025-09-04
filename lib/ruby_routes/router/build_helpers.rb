@@ -17,6 +17,9 @@ module RubyRoutes
       def build
         router = Router.new
         validate_calls(@recorded_calls)
+        @recorded_calls.each do |method, args, block|
+          router.public_send(method, *args, &block)
+        end
         router.finalize!
         router
       end

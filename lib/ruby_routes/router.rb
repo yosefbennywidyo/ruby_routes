@@ -88,11 +88,16 @@ module RubyRoutes
       return self if @frozen
 
       @frozen = true
+      if @route_set.respond_to?(:finalize!)
+        @route_set.finalize!
+      else
+        @route_set.freeze
+      end
+      @route_utils.freeze if @route_utils.respond_to?(:freeze)
       @scope_stack.freeze
       @concerns.freeze
       self
     end
-
     # Check if the router is frozen.
     #
     # @return [Boolean] `true` if the router is frozen, `false` otherwise.
@@ -100,12 +105,17 @@ module RubyRoutes
       !!@frozen
     end
 
-    # Define a root route.
+    # Define the root route.
     #
     # @param options [Hash] The options for the root route.
     # @return [Router] self.
     def root(options = {})
-      add_route('/', build_route_options(options, :get))
+      ensure_unfrozen!
+      if options[:to]
+        add_route('/', via: [:get], **options)
+      else
+        add_route('/', controller: 'root', action: :index, via: [:get], **options)
+      end
       self
     end
 
@@ -118,6 +128,7 @@ module RubyRoutes
     # @param nested_block [Proc] The block for nested routes.
     # @return [Router] self.
     def resources(resource_name, options = {}, &nested_block)
+      ensure_unfrozen!
       define_resource_routes(resource_name, options, &nested_block)
       self
     end
@@ -128,6 +139,7 @@ module RubyRoutes
     # @param options [Hash] The options for the resource.
     # @return [Router] self.
     def resource(resource_name, options = {})
+      ensure_unfrozen!
       singular   = RubyRoutes::Utility::InflectorUtility.singularize(resource_name.to_s)
       controller = options[:controller] || singular
       define_singular_routes(singular, controller, options)
@@ -142,6 +154,7 @@ module RubyRoutes
     # @param block [Proc] The block for nested routes.
     # @return [Router] self.
     def namespace(namespace_name, options = {}, &block)
+      ensure_unfrozen!
       push_scope({ path: "/#{namespace_name}", module: namespace_name }.merge(options)) do
         instance_eval(&block) if block
       end
@@ -153,6 +166,7 @@ module RubyRoutes
     # @param block [Proc] The block for nested routes.
     # @return [Router] self.
     def scope(options_or_path = {}, &block)
+      ensure_unfrozen!
       scope_entry = options_or_path.is_a?(String) ? { path: options_or_path } : options_or_path
       push_scope(scope_entry) { instance_eval(&block) if block }
     end
@@ -163,6 +177,7 @@ module RubyRoutes
     # @param block [Proc] The block for nested routes.
     # @return [Router] self.
     def constraints(constraints_hash = {}, &block)
+      ensure_unfrozen!
       push_scope(constraints: constraints_hash) { instance_eval(&block) if block }
     end
 
@@ -172,6 +187,7 @@ module RubyRoutes
     # @param block [Proc] The block for nested routes.
     # @return [Router] self.
     def defaults(defaults_hash = {}, &block)
+      ensure_unfrozen!
       push_scope(defaults: defaults_hash) { instance_eval(&block) if block }
     end
 
@@ -193,6 +209,7 @@ module RubyRoutes
     # @param block [Proc] The block for additional routes.
     # @return [void]
     def concerns(*concern_names, &block)
+      ensure_unfrozen!
       concern_names.each do |name|
         concern_block = @concerns[name]
         raise "Concern '#{name}' not found" unless concern_block
