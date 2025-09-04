@@ -71,7 +71,9 @@ router = RubyRoutes.draw do
           id: { range: 1..999999, format: /\A\d+\z/ }
         }
 end
-```## Security Considerations
+```
+
+## Security Considerations
 
 ### ⚠️ Deprecated: Proc Constraints
 
