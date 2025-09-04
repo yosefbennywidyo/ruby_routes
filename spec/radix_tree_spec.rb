@@ -105,9 +105,10 @@ RSpec.describe RubyRoutes::RadixTree do
         route = double('route')  # Define route as a double
         tree.add('/users/:id/profile', ['GET'], route)
         result = tree.find('/users/123/invalid', 'GET')
-
-        # Assuming fallback to best candidate, ensure params include captured 'id'
-        expect(result[1]).to include('id' => '123') if result[0]  # Adjust based on fallback logic
+        # The path doesn't match, so result should be nil
+        expect(result[0]).to be_nil
+        # Or if partial matches are expected to return params:
+        # expect(result[1]).to include('id' => '123')
       end
     end
 
@@ -202,12 +203,12 @@ RSpec.describe RubyRoutes::RadixTree do
 
     context 'with unknown symbolic constraints' do
       it 'raises ConstraintViolation for unknown symbols' do
-        route = described_class.new('/test/:param', to: 'test#show', constraints: { param: :unknown })
+        route = RubyRoutes::Route.new('/test/:param', to: 'test#show', constraints: { param: :unknown })
         expect { route.validate_constraints_fast!({ 'param' => 'value' }) }.to raise_error(RubyRoutes::ConstraintViolation)
       end
 
       it 'raises ConstraintViolation for unknown string constraints' do
-        route = described_class.new('/test/:param', to: 'test#show', constraints: { param: 'unknown' })
+        route = RubyRoutes::Route.new('/test/:param', to: 'test#show', constraints: { param: 'unknown' })
         expect { route.validate_constraints_fast!({ 'param' => 'value' }) }.to raise_error(RubyRoutes::ConstraintViolation)
       end
     end

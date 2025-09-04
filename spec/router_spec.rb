@@ -586,4 +586,54 @@ RSpec.describe RubyRoutes::Router do
       expect(route.path).to eq('/api/v1/users')  # Ensure leading /
     end
   end
+
+  describe 'immutability after finalization' do
+    let(:finalized_router) { RubyRoutes::Router.new { get '/test', to: 'test#index' }.finalize! }
+
+    it 'prevents adding routes after finalization' do
+      expect { finalized_router.get '/new', to: 'new#index' }.to raise_error(RuntimeError, 'Router finalized (immutable)')
+    end
+
+    it 'prevents defining resources after finalization' do
+      expect { finalized_router.resources :users }.to raise_error(RuntimeError, 'Router finalized (immutable)')
+    end
+
+    it 'prevents defining root route after finalization' do
+      expect { finalized_router.root }.to raise_error(RuntimeError, 'Router finalized (immutable)')
+    end
+
+    it 'prevents defining namespace after finalization' do
+      expect { finalized_router.namespace :admin }.to raise_error(RuntimeError, 'Router finalized (immutable)')
+    end
+
+    it 'prevents defining scope after finalization' do
+      expect { finalized_router.scope path: '/api' }.to raise_error(RuntimeError, 'Router finalized (immutable)')
+    end
+
+    it 'prevents defining constraints after finalization' do
+      expect { finalized_router.constraints id: /\d+/ }.to raise_error(RuntimeError, 'Router finalized (immutable)')
+    end
+
+    it 'prevents defining defaults after finalization' do
+      expect { finalized_router.defaults format: :json }.to raise_error(RuntimeError, 'Router finalized (immutable)')
+    end
+
+    it 'prevents defining concerns after finalization' do
+      expect { finalized_router.concern :testable }.to raise_error(RuntimeError, 'Router finalized (immutable)')
+    end
+
+    it 'prevents using concerns after finalization' do
+      finalized_router = RubyRoutes::Router.new do
+        concern :testable do
+          get '/test', to: 'test#index'
+        end
+      end.finalize!
+
+      expect { finalized_router.concerns :testable }.to raise_error(RuntimeError, 'Router finalized (immutable)')
+    end
+
+    it 'prevents mounting after finalization' do
+      expect { finalized_router.mount(double('app')) }.to raise_error(RuntimeError, 'Router finalized (immutable)')
+    end
+  end
 end
