@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'set'
+require 'thread'
 
 module RubyRoutes
   class Route
@@ -19,13 +20,14 @@ module RubyRoutes
       # @param param [String, Symbol] The parameter name for which the warning
       #   is being emitted.
       # @return [void]
+
       def warn_proc_constraint_deprecation(param)
         key = param.to_sym
-        return if @proc_warnings_shown&.include?(key)
-
-        @proc_warnings_shown ||= Set.new
-        @proc_warnings_shown << key
-        warn_proc_warning(key)
+        @warnings_mutex ||= Mutex.new
+        @warnings_mutex.synchronize do
+          @proc_warnings_shown ||= Set.new
+          warn_proc_warning(key) if @proc_warnings_shown.add?(key)
+        end
       end
 
       # Warn about `Proc` constraint deprecation.

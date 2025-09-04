@@ -83,7 +83,7 @@ module RubyRoutes
       setup_controller_and_action(options)
 
       @name = options[:as]
-      @constraints = options[:constraints] || {}
+      @constraints = (options[:constraints] || {}).freeze
       @defaults = (options[:defaults] || {}).transform_keys(&:to_s).freeze
       @param_key_slots = [[nil, nil], [nil, nil]]
       @required_validated_once = false

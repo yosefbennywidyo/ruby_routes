@@ -2,6 +2,7 @@
 
 require_relative 'path_generation'
 require_relative 'warning_helpers'
+require_relative 'constraint_validator'
 
 module RubyRoutes
   class Route
