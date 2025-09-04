@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'build_helpers'
+require_relative '../utility/inflector_utility'
 
 module RubyRoutes
   class Router
