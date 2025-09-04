@@ -18,10 +18,10 @@ module RubyRoutes
       # @param route [Route] The route to add.
       # @return [Route] The added route.
       def add_to_collection(route)
-        @named_routes[route.name] = route if route.named?
-        @radix_tree.add(route.path, route.methods, route)
         return route if @routes.include?(route) # Prevent duplicate insertion
 
+        @named_routes[route.name] = route if route.named?
+        @radix_tree.add(route.path, route.methods, route)
         @routes << route
         route
       end
@@ -74,13 +74,16 @@ module RubyRoutes
       #
       # @return [void]
       def clear!
-        @routes.clear
-        @named_routes.clear
-        @recognition_cache.clear
-        @cache_hits = 0
-        @cache_misses = 0
-        @radix_tree = RadixTree.new
-        RubyRoutes::Utility::KeyBuilderUtility.clear!
+        @cache_mutex ||= Mutex.new
+        @cache_mutex.synchronize do
+          @routes.clear
+          @named_routes.clear
+          @recognition_cache.clear
+          @cache_hits = 0
+          @cache_misses = 0
+          @radix_tree = RadixTree.new
+          RubyRoutes::Utility::KeyBuilderUtility.clear!
+        end
       end
 
       # Get the number of routes.
