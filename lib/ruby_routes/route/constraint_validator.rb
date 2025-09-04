@@ -66,6 +66,8 @@ module RubyRoutes
           validate_alpha_constraint(value)
         when 'alphanumeric'
           validate_alphanumeric_constraint(value)
+        else
+          invalid!
         end
       end
 
