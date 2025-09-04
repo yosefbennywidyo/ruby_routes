@@ -36,26 +36,6 @@ module RubyRoutes
 
       private
 
-      # Define RESTful routes for a resource.
-      #
-      # @param resource_name [Symbol, String] The name of the resource.
-      # @param options [Hash] Options for customizing the resource routes.
-      #   - `:path` [String] Custom path for the resource.
-      #   - `:controller` [String] Custom controller name.
-      #   - `:nested` [Symbol, String] Name of the nested resource.
-      # @param nested_block [Proc] A block for defining nested routes.
-      # @return [void]
-      def define_resource_routes(resource_name, options = {}, &nested_block)
-        meta = resource_meta(resource_name, options)
-        opts = prepare_options(options)
-
-        push_scope(path: "/#{meta[:resource_path]}") do
-          build_routes(opts, meta)
-          handle_nested_option(options, opts)
-          apply_nested_block(nested_block)
-        end
-      end
-
       # Prepare options by removing the `:to` key if present.
       #
       # @param options [Hash] The options hash.
