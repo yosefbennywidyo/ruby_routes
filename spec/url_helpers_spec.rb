@@ -261,10 +261,10 @@ RSpec.describe RubyRoutes::UrlHelpers do
   describe 'integration with route_set' do
     it 'works with complex parameter combinations' do
       # Add a route with multiple parameters
-      complex_route = RubyRoutes::RadixTree.new('/posts/:post_id/comments/:id',
+      complex_route = RubyRoutes::Route.new('/posts/:post_id/comments/:id',
                                                 to: 'comments#show',
                                                 as: :post_comment)
-      route_set.add_route(complex_route)
+      route_set.register(complex_route)
 
       path = helper.path_to(:post_comment, post_id: '456', id: '789')
       expect(path).to eq('/posts/456/comments/789')
@@ -290,7 +290,7 @@ RSpec.describe RubyRoutes::UrlHelpers do
       # Set up route_set
       route = RubyRoutes::Route.new('/users/:id', to: 'users#show')
       route_set = RubyRoutes::RouteSet.new
-      route_set.add_route(route)
+      route_set.register(route)
 
       # Add the helper method to the class
       test_class.add_url_helper(:user_path, route)

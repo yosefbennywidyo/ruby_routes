@@ -210,9 +210,19 @@ RSpec.describe RubyRoutes::RadixTree do
       route = double('route')
       tree.add('/path/:id', ['GET'], route)
       (1..3000).each { |i| tree.find("/path/#{i}", 'GET') }
-      cache     = tree.instance_variable_get(:@split_cache)
+      cache = tree.instance_variable_get(:@split_cache)
       cache_max = tree.instance_variable_get(:@split_cache_max)
+
+      expect(cache.size).to be <= cache_max
+
+      # Define r2 and r3 as doubles
+      r2 = double('route2')
+      r3 = double('route3')
+
+      # Add a route that matches the query path
+      tree.add('/users/:id', ['GET'], r2)
       expect(tree.find('/users/123', 'GET').first).to eq(r2)
+
       tree.add('/users/:id/posts', ['GET'], r3)
       expect(tree.find('/users/123/posts', 'GET').first).to eq(r3)
     end
