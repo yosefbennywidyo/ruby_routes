@@ -42,7 +42,10 @@ module RubyRoutes
       # @return [Array<Array(Symbol, Array, Proc|NilClass)>]
       #   A snapshot of the recorded calls to avoid external mutation.
       def recorded_calls
-        @recorded_calls.dup.freeze
+        # Deep-copy each recorded call’s args array and freeze the result to prevent mutation
+        @recorded_calls
+          .map { |(method_name, args, block)| [method_name, args.dup.freeze, block] }
+          .freeze
       end
 
       # Initialize the Builder.
@@ -70,26 +73,6 @@ module RubyRoutes
         define_method(method_name) do |*arguments, &definition_block|
           @recorded_calls << [__method__, arguments, definition_block]
           nil
-        end
-      end
-
-      private
-
-      # Validate the recorded calls.
-      #
-      # This method ensures that all recorded calls use valid router methods
-      # as defined in `RubyRoutes::Constant::RECORDED_METHODS`.
-      #
-      # @param recorded_calls [Array<Array(Symbol, Array, Proc|NilClass)>]
-      #   The recorded calls to validate.
-      # @raise [ArgumentError] If any recorded call uses an invalid method.
-      # @return [void]
-      def validate_calls(recorded_calls)
-        allowed_router_methods = RubyRoutes::Constant::RECORDED_METHODS
-        recorded_calls.each do |(router_method, _arguments, _definition_block)|
-          unless router_method.is_a?(Symbol) && allowed_router_methods.include?(router_method)
-            raise ArgumentError, "Invalid router method: #{router_method.inspect}"
-          end
         end
       end
     end

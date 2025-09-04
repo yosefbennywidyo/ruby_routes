@@ -19,7 +19,14 @@ RSpec.describe RubyRoutes::Route::PathGeneration do
       before do
         route.instance_variable_set(:@required_params, required_params) # Set instance variable directly
         route.instance_variable_set(:@param_names, param_names)
-        allow(route).to receive(:cache_key_for_params).and_return('key1', 'key2')
+        expect(route).to receive(:cache_key_for_params)
+          .with(param_names, optional_params_1)
+          .ordered
+          .and_return('key1')
+        expect(route).to receive(:cache_key_for_params)
+          .with(param_names, optional_params_2)
+          .ordered
+          .and_return('key2')
       end
 
       it 'generates different cache keys for different optional params' do

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'build_helpers'
+require_relative '../utility/inflector_utility'
 
 module RubyRoutes
   class Router
@@ -12,8 +13,6 @@ module RubyRoutes
     # and controller actions.
     module ResourceHelpers
       include RubyRoutes::Router::BuildHelpers
-
-      private
 
       # Define RESTful routes for a resource.
       #
@@ -34,6 +33,8 @@ module RubyRoutes
           apply_nested_block(nested_block)
         end
       end
+
+      private
 
       # Prepare options by removing the `:to` key if present.
       #

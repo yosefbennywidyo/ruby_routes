@@ -64,12 +64,15 @@ module RubyRoutes
       # @param entry [Hash] The cache entry.
       # @return [void]
       def insert_cache_entry(cache_key, entry)
-        if @recognition_cache.size >= @recognition_cache_max
-          @recognition_cache.keys.first(@recognition_cache_max / 4).each do |evict_key|
-            @recognition_cache.delete(evict_key)
+        @cache_mutex ||= Mutex.new
+        @cache_mutex.synchronize do
+          if @recognition_cache.size >= @recognition_cache_max
+            @recognition_cache.keys.first(@recognition_cache_max / 4).each do |evict_key|
+              @recognition_cache.delete(evict_key)
+            end
           end
+          @recognition_cache[cache_key] = entry
         end
-        @recognition_cache[cache_key] = entry
       end
     end
   end

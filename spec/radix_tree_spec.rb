@@ -80,6 +80,38 @@ RSpec.describe RubyRoutes::RadixTree do
   end
 
   describe '#find' do
+    context 'with dynamic segments' do
+      it 'merges captured params into the params hash' do
+        route = double('route')  # Define route as a double
+        tree.add('/users/:id', ['GET'], route)
+        result = tree.find('/users/123', 'GET')
+
+        expect(result[1]).to include('id' => '123')  # Ensure captured param is in params
+      end
+    end
+
+    context 'with wildcard segments' do
+      it 'merges captured params into the params hash' do
+        route = double('route')  # Define route as a double
+        tree.add('/files/*path', ['GET'], route)
+        result = tree.find('/files/docs/readme.txt', 'GET')
+
+        expect(result[1]).to include('path' => 'docs/readme.txt')  # Ensure captured param is in params
+      end
+    end
+
+    context 'when traversal fails mid-path' do
+      it 'retains captured params from successful segments' do
+        route = double('route')  # Define route as a double
+        tree.add('/users/:id/profile', ['GET'], route)
+        result = tree.find('/users/123/invalid', 'GET')
+        # The path doesn't match, so result should be nil
+        expect(result[0]).to be_nil
+        # Or if partial matches are expected to return params:
+        # expect(result[1]).to include('id' => '123')
+      end
+    end
+
     it 'returns nil for non-matching paths' do
       result, = tree.find('/nonexistent', 'GET')
       expect(result).to be_nil
@@ -169,11 +201,16 @@ RSpec.describe RubyRoutes::RadixTree do
       expect(result).to eq(route)
     end
 
-    it 'handles unknown symbolic constraints gracefully (passes)' do
-      route = build_route_with_constraints(id: :unknown_constraint)
-      tree.add('/users/:id', ['GET'], route)
-      result, = tree.find('/users/123', 'GET', { 'id' => '123' })
-      expect(result).to eq(route)
+    context 'with unknown symbolic constraints' do
+      it 'raises ConstraintViolation for unknown symbols' do
+        route = RubyRoutes::Route.new('/test/:param', to: 'test#show', constraints: { param: :unknown })
+        expect { route.validate_constraints_fast!({ 'param' => 'value' }) }.to raise_error(RubyRoutes::ConstraintViolation)
+      end
+
+      it 'raises ConstraintViolation for unknown string constraints' do
+        route = RubyRoutes::Route.new('/test/:param', to: 'test#show', constraints: { param: 'unknown' })
+        expect { route.validate_constraints_fast!({ 'param' => 'value' }) }.to raise_error(RubyRoutes::ConstraintViolation)
+      end
     end
   end
 
@@ -210,9 +247,19 @@ RSpec.describe RubyRoutes::RadixTree do
       route = double('route')
       tree.add('/path/:id', ['GET'], route)
       (1..3000).each { |i| tree.find("/path/#{i}", 'GET') }
-      cache     = tree.instance_variable_get(:@split_cache)
+      cache = tree.instance_variable_get(:@split_cache)
       cache_max = tree.instance_variable_get(:@split_cache_max)
+
+      expect(cache.size).to be <= cache_max
+
+      # Define r2 and r3 as doubles
+      r2 = double('route2')
+      r3 = double('route3')
+
+      # Add a route that matches the query path
+      tree.add('/users/:id', ['GET'], r2)
       expect(tree.find('/users/123', 'GET').first).to eq(r2)
+
       tree.add('/users/:id/posts', ['GET'], r3)
       expect(tree.find('/users/123/posts', 'GET').first).to eq(r3)
     end

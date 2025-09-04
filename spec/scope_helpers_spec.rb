@@ -19,7 +19,7 @@ RSpec.describe RubyRoutes::Router::ScopeHelpers do
     let(:scope) { { module: 'admin' } }
 
     context 'when :to is provided' do
-      it 'does not mutate the original :to value' do
+      it 'mutates the original :to value by prepending the module' do
         scoped_options = { to: 'users#index' }
         scope_helper.send(:apply_module_scope, scope, scoped_options)
 
@@ -42,7 +42,7 @@ RSpec.describe RubyRoutes::Router::ScopeHelpers do
     end
 
     context 'when :controller is provided' do
-      it 'does not mutate the original :controller value' do
+      it 'mutates the original :controller value by prepending the module' do
         scoped_options = { controller: 'users' }
         scope_helper.send(:apply_module_scope, scope, scoped_options)
 

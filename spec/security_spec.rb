@@ -47,9 +47,14 @@ RSpec.describe 'Security Features' do
 
     it 'protects against slow Proc constraints' do
       slow_proc = lambda { |_value|
-        sleep(1)
+        # CPU-intensive operation that can be interrupted
+        start_time = Time.now
+        while Time.now - start_time < 1
+          # Busy loop
+        end
         true
       }
+
       route = RubyRoutes::RadixTree.new('/test/:param', to: 'test#show', constraints: { param: slow_proc })
 
       expect do

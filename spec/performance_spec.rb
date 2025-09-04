@@ -5,7 +5,7 @@ require 'benchmark'
 
 RSpec.describe 'Performance Optimizations' do
   let(:router) do
-    RubyRoutes.draw do
+    RubyRoutes::Router.new do
       resources :users # This creates named routes like :user, :users, :edit_user, etc.
       resources :posts
       resources :comments
@@ -114,9 +114,8 @@ RSpec.describe 'Performance Optimizations' do
 
   describe 'String Interning' do
     it 'reuses interned HTTP method strings' do
-      route = RubyRoutes::RadixTree.new('/test', to: 'test#index', via: :get)
-
-      # Should use the same object for GET method
+      router = RubyRoutes.draw { get '/test', to: 'test#index', as: :test, via: :get }
+      route  = router.route_set.find_named_route(:test) # or: router.route_set.instance_variable_get(:@named_routes)[:test]
       expect(route.methods.first).to equal(RubyRoutes::Constant::HTTP_GET)
     end
 

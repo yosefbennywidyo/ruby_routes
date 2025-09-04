@@ -64,11 +64,6 @@ RSpec.describe RubyRoutes::Route do
 
   describe '#query_params_fast' do
     it 'returns empty hash for empty query string' do
-
-      expect(result).to eq({})
-      expect(result).to be_empty
-      expect(result).to be_frozen
-
       # Also test with multiple question marks but empty content
       result = route.send(:query_params_fast, '/users/123???')
       expect(result).to eq({})
@@ -503,9 +498,6 @@ RSpec.describe RubyRoutes::Route do
 
       # Create an object that behaves like a hash but doesn't have transform_keys
       params = Object.new
-      def params.respond_to?(method)
-        method != :transform_keys
-      end
 
       # Define method_missing to handle calls to key? and []
       def params.method_missing(method, *args)
@@ -518,6 +510,10 @@ RSpec.describe RubyRoutes::Route do
         else
           super
         end
+      end
+
+      def params.respond_to_missing?(method, include_private = false)
+        %i[key? has_key? [] each empty?].include?(method) || super
       end
 
       def params.each

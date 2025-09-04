@@ -107,6 +107,8 @@ module RubyRoutes
     # @return [Integer]
     QUERY_CACHE_SIZE = 128
 
+    METHOD_CACHE_MAX_SIZE = 1000
+
     # HTTP method constants.
     HTTP_GET     = 'GET'
     HTTP_POST    = 'POST'
@@ -146,7 +148,7 @@ module RubyRoutes
     # Default result for no traversal match.
     #
     # @return [Array]
-    NO_TRAVERSAL_RESULT = [nil, false, {}].freeze
+    NO_TRAVERSAL_RESULT = [nil, false, EMPTY_HASH].freeze
 
     # Built-in validators for constraints.
     #
@@ -171,7 +173,7 @@ module RubyRoutes
       segment_string = raw.to_s
       dispatch_key   = segment_string.empty? ? :default : segment_string.getbyte(0)
       factory        = DESCRIPTOR_FACTORIES[dispatch_key] || DESCRIPTOR_FACTORIES[:default]
-      factory.call(segment_string)
+      factory.call(segment_string).freeze
     end
   end
 end

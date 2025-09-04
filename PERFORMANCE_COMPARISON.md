@@ -14,21 +14,25 @@ This document presents a comprehensive performance comparison between the main b
 ## Key Optimizations Implemented
 
 ### 1. 🎯 Longest Prefix Matching in RadixTree#find
+
 - **Before**: Failed matches returned `nil`
 - **After**: Returns the longest valid prefix match
 - **Benefit**: Better route resolution for overlapping routes
 
 ### 2. ⚡ Improved LRU Cache Behavior
+
 - **Before**: Accessed items stayed in original position
 - **After**: Accessed items moved to end for proper LRU eviction
 - **Benefit**: Better cache hit rates and memory efficiency
 
 ### 3. 🧊 Static Segment Key Freezing
+
 - **Before**: Mutable string keys
 - **After**: Frozen static keys for immutability
 - **Benefit**: Memory optimization and performance gains
 
 ### 4. 📈 Enhanced Documentation
+
 - Added comprehensive code comments
 - Documented matching order (static → dynamic → wildcard)
 - Explained parameter capture logic
@@ -37,7 +41,7 @@ This document presents a comprehensive performance comparison between the main b
 
 ### Main Branch (Original Implementation)
 
-```
+```bash
 Router created with 129 routes
 
 Benchmarking route matching (optimized):
@@ -68,7 +72,7 @@ Total benchmark duration: 0.23 seconds
 
 ### Optimized Branch (Current Implementation)
 
-```
+```bash
 Router created with 129 routes
 
 Benchmarking route matching (optimized):
@@ -105,7 +109,7 @@ Total benchmark duration: 0.22 seconds
 |--------|-------------|------------------|-------------|
 | **Route Matching Time** | 0.060694s | 0.060062s | +1.04% faster |
 | **Path Generation Time** | 0.049470s | 0.049076s | +0.80% faster |
-| **Total Benchmark Duration** | 0.23s | 0.22s | **+5.16% faster** |
+| **Total Benchmark Duration** | 0.23s | 0.22s | **+4.35% faster** |
 | **Memory Usage** | 0 KB increase | 0 KB increase | Stable |
 | **Cache Hit Rate** | 99.99% | 99.99% | Maintained |
 | **Cache Efficiency** | 11 misses | 11 misses | Consistent |
@@ -123,6 +127,7 @@ Total benchmark duration: 0.22 seconds
 Beyond raw performance, the optimized version provides:
 
 #### Longest Prefix Matching
+
 ```ruby
 # Before: Would return nil for partial matches
 tree.find('/api/unknown', 'GET') # => nil
@@ -132,6 +137,7 @@ tree.find('/api/unknown', 'GET') # => Returns /api handler
 ```
 
 #### Improved Cache Behavior
+
 ```ruby
 # Before: Accessed items stayed in place
 cache.get('existing_key') # No LRU order change
@@ -141,6 +147,7 @@ cache.get('existing_key') # Moved to end of order array
 ```
 
 #### Memory Optimization
+
 ```ruby
 # Before: Mutable string keys
 segment_key = "static_path" # Mutable
@@ -162,20 +169,24 @@ The performance comparison covers:
 ## Conclusion
 
 The optimized branch demonstrates measurable performance improvements while maintaining:
+
 - **Full backward compatibility**
 - **Identical API surface**
 - **Stable memory usage**
 - **Excellent cache performance**
 
 ### Key Benefits
-- **5.16% faster** overall performance
+
+- **4.35% faster** overall performance
 - **Better route resolution** with longest prefix matching
 - **Improved cache efficiency** with proper LRU behavior
 - **Memory optimizations** through frozen static keys
 - **Enhanced maintainability** with comprehensive documentation
 
 ### Production Impact
+
 These optimizations provide tangible benefits for production applications:
+
 - Faster response times for route-intensive applications
 - Better handling of complex routing scenarios
 - Improved memory efficiency for long-running processes

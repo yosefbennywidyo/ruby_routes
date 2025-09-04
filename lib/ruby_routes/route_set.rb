@@ -90,18 +90,6 @@ module RubyRoutes
       route.generate_path(params)
     end
 
-    # Replay recorded calls on the router instance.
-    #
-    # This method replays all the recorded route definitions and other
-    # configuration calls on the given router instance.
-    #
-    # @param router [Router] The router instance to replay calls on.
-    # @return [void]
-    def replay_recorded_calls(router)
-      # Placeholder for actual implementation
-      # Iterate over recorded calls and apply them to the router
-    end
-
     private
 
     # Set up the radix tree for structural path matching.
