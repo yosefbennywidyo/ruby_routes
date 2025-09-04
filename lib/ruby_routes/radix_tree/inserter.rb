@@ -46,6 +46,7 @@ module RubyRoutes
       # @return [Node] the dynamic child node
       def handle_dynamic(current_node, token)
         param_name = token[1..]
+        raise ArgumentError, "Dynamic parameter name cannot be empty" if param_name.nil? || param_name.empty?
         current_node.dynamic_child ||= build_param_node(param_name)
         current_node.dynamic_child
       end

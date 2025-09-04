@@ -165,9 +165,7 @@ module RubyRoutes
       # @param params [Hash] parameters hash
       # @param captured_params [Hash] captured parameters from traversal
       # @return [Array] [handler, params] or [nil, params]
-      def fallback_candidate(state, method, params, captured_params)
-        finalize_match(state[:best_node], method, state[:best_params], state[:best_captured])
-      end
+
 
       # Common method to finalize a match attempt.
       # Assumes the node is already validated as an endpoint.
@@ -178,20 +176,18 @@ module RubyRoutes
       # @param captured_params [Hash] captured parameters from traversal
       # @return [Array] [handler, params] or [nil, params]
       def finalize_match(node, method, params, captured_params)
+        # Apply captured params once at the beginning
+        apply_captured_params(params, captured_params)
+
         if node && endpoint_with_method?(node, method)
           handler = node.handlers[method]
-          # Apply captured params before constraint validation
-          apply_captured_params(params, captured_params)
           if check_constraints(handler, params)
             return [handler, params]
           end
         end
         # For non-matching paths, return nil
-        apply_captured_params(params, captured_params)
         [nil, params]
       end
-
-      # Handles matching for the root path.
       #
       # @param method [String] HTTP method
       # @param params_out [Hash] parameters hash
