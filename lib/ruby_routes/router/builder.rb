@@ -42,7 +42,10 @@ module RubyRoutes
       # @return [Array<Array(Symbol, Array, Proc|NilClass)>]
       #   A snapshot of the recorded calls to avoid external mutation.
       def recorded_calls
-        @recorded_calls.dup.freeze
+        # Deep-copy each recorded call’s args array and freeze the result to prevent mutation
+        @recorded_calls
+          .map { |(method_name, args, block)| [method_name, args.dup.freeze, block] }
+          .freeze
       end
 
       # Initialize the Builder.
