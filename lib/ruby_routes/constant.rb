@@ -107,6 +107,8 @@ module RubyRoutes
     # @return [Integer]
     QUERY_CACHE_SIZE = 128
 
+    METHOD_CACHE_MAX_SIZE = 1000
+
     # HTTP method constants.
     HTTP_GET     = 'GET'
     HTTP_POST    = 'POST'
