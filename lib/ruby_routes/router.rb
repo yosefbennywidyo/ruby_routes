@@ -3,6 +3,7 @@
 require_relative 'utility/inflector_utility'
 require_relative 'utility/route_utility'
 require_relative 'router/http_helpers'
+require_relative 'router/resource_helpers'
 require_relative 'constant'
 require_relative 'route_set'
 module RubyRoutes
