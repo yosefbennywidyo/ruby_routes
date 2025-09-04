@@ -75,26 +75,6 @@ module RubyRoutes
           nil
         end
       end
-
-      private
-
-      # Validate the recorded calls.
-      #
-      # This method ensures that all recorded calls use valid router methods
-      # as defined in `RubyRoutes::Constant::RECORDED_METHODS`.
-      #
-      # @param recorded_calls [Array<Array(Symbol, Array, Proc|NilClass)>]
-      #   The recorded calls to validate.
-      # @raise [ArgumentError] If any recorded call uses an invalid method.
-      # @return [void]
-      def validate_calls(recorded_calls)
-        allowed_router_methods = RubyRoutes::Constant::RECORDED_METHODS
-        recorded_calls.each do |(router_method, _arguments, _definition_block)|
-          unless router_method.is_a?(Symbol) && allowed_router_methods.include?(router_method)
-            raise ArgumentError, "Invalid router method: #{router_method.inspect}"
-          end
-        end
-      end
     end
   end
 end
