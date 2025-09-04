@@ -200,11 +200,16 @@ RSpec.describe RubyRoutes::RadixTree do
       expect(result).to eq(route)
     end
 
-    it 'handles unknown symbolic constraints gracefully (passes)' do
-      route = build_route_with_constraints(id: :unknown_constraint)
-      tree.add('/users/:id', ['GET'], route)
-      result, = tree.find('/users/123', 'GET', { 'id' => '123' })
-      expect(result).to eq(route)
+    context 'with unknown symbolic constraints' do
+      it 'raises ConstraintViolation for unknown symbols' do
+        route = described_class.new('/test/:param', to: 'test#show', constraints: { param: :unknown })
+        expect { route.validate_constraints_fast!({ 'param' => 'value' }) }.to raise_error(RubyRoutes::ConstraintViolation)
+      end
+
+      it 'raises ConstraintViolation for unknown string constraints' do
+        route = described_class.new('/test/:param', to: 'test#show', constraints: { param: 'unknown' })
+        expect { route.validate_constraints_fast!({ 'param' => 'value' }) }.to raise_error(RubyRoutes::ConstraintViolation)
+      end
     end
   end
 
