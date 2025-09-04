@@ -3,6 +3,7 @@
 require_relative 'segment'
 require_relative 'utility/path_utility'
 require_relative 'utility/method_utility'
+require_relative 'constant'
 
 module RubyRoutes
   # Node
