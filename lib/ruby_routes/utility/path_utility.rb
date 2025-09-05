@@ -56,10 +56,20 @@ module RubyRoutes
       #   split_path('/users/123?x=1') # => ["users", "123"]
       #   split_path('/')              # => []
       def split_path(raw_path)
-        path_without_query = raw_path.to_s.split(/[?#]/, 2).first
-        return [] if path_without_query.nil? || path_without_query.empty?
+        return [] if raw_path == '/' || raw_path.empty?
 
-        path_without_query.split('/').reject(&:empty?)
+        # Strip query strings and fragments
+        path = raw_path.split(/[?#]/).first
+
+        # Optimized trimming: avoid string allocations when possible
+        start_idx = path.start_with?('/') ? 1 : 0
+        end_idx = path.end_with?('/') ? -2 : -1
+
+        if start_idx == 0 && end_idx == -1
+          path.split('/').reject(&:empty?)
+        else
+          path[start_idx..end_idx].split('/').reject(&:empty?)
+        end
       end
 
       # Join path parts into a normalized absolute path.

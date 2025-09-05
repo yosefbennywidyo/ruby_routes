@@ -71,9 +71,7 @@ module RubyRoutes
         # @param request_path [String] The request path.
         # @return [Array<String>] An array containing the frozen method and path keys.
         def prepare_keys(http_method, request_path)
-          method_key = http_method.frozen? ? http_method : http_method.dup.freeze
-          path_key = request_path.frozen? ? request_path : request_path.dup.freeze
-          [method_key, path_key]
+          [http_method, request_path]
         end
 
         # Handle a cache miss by creating a composite key and updating the ring buffer.
