@@ -40,6 +40,7 @@ module RubyRoutes
         @recognition_cache_max = 2048
         @cache_hits = 0
         @cache_misses = 0
+        @cache_mutex = Mutex.new
       end
 
       # Fetch cached recognition entry while updating hit counter.
@@ -48,10 +49,10 @@ module RubyRoutes
       # @return [Hash, nil] The cached recognition entry, or `nil` if not found.
       def fetch_cached_recognition(lookup_key)
         if (cached_result = @recognition_cache[lookup_key])
-          @cache_hits += 1
+          @cache_hits += 1 unless frozen?
           return cached_result
         end
-        @cache_misses += 1
+        @cache_misses += 1 unless frozen?
         nil
       end
 
@@ -64,7 +65,6 @@ module RubyRoutes
       # @param entry [Hash] The cache entry.
       # @return [void]
       def insert_cache_entry(cache_key, entry)
-        @cache_mutex ||= Mutex.new
         @cache_mutex.synchronize do
           if @recognition_cache.size >= @recognition_cache_max
             @recognition_cache.keys.first(@recognition_cache_max / 4).each do |evict_key|
