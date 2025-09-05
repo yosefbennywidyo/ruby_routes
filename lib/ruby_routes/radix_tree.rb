@@ -77,8 +77,6 @@ module RubyRoutes
       super
     end
 
-    private
-
     # Split path with small manual LRU cache.
     #
     # @param raw_path [String]
