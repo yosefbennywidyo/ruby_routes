@@ -17,6 +17,9 @@ RSpec.describe RubyRoutes::RadixTree do
     # Real constraints method
     route.define_singleton_method(:constraints) { constraints_hash }
 
+    # Real constraints method
+    route.define_singleton_method(:constraints) { constraints_hash }
+
     # Real validation hook (simulates Route#validate_constraints_fast!)
     route.define_singleton_method(:validate_constraints_fast!) do |params|
       constraints_hash.each do |key, rule|

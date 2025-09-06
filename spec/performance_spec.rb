@@ -123,11 +123,11 @@ RSpec.describe 'Performance Optimizations' do
       route = RubyRoutes::RadixTree.new('/users/profile', to: 'users#profile')
 
       # Static segment values should be frozen
-      users_segment = route.instance_variable_get(:@compiled_segments).find { |s| s[:value] == 'users' }
-      profile_segment = route.instance_variable_get(:@compiled_segments).find { |s| s[:value] == 'profile' }
+      users_segment = route.instance_variable_get(:@compiled_segments).find { |s| s.is_a?(RubyRoutes::Segments::StaticSegment) && s.instance_variable_get(:@literal_text) == 'users' }
+      profile_segment = route.instance_variable_get(:@compiled_segments).find { |s| s.is_a?(RubyRoutes::Segments::StaticSegment) && s.instance_variable_get(:@literal_text) == 'profile' }
 
-      expect(users_segment[:value]).to be_frozen
-      expect(profile_segment[:value]).to be_frozen
+      expect(users_segment.instance_variable_get(:@literal_text)).to be_frozen
+      expect(profile_segment.instance_variable_get(:@literal_text)).to be_frozen
     end
   end
 

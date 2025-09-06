@@ -757,7 +757,7 @@ RSpec.describe RubyRoutes::Route do
       it "doesn't cache validation results for non-frozen params" do
         # Create a non-frozen params hash
         params = { id: '123' }
-        result = double('validation_result')
+        double('validation_result')
 
         # Verify it wasn't cached
         cached_result = route.send(:get_cached_validation, params)
