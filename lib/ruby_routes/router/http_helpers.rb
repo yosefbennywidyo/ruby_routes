@@ -22,54 +22,13 @@ module RubyRoutes
 
       # ---- HTTP Verb Helpers -------------------------------------------------
 
-      # Define a GET route.
-      #
-      # @param path [String] The path for the route.
-      # @param options [Hash] The options for the route.
-      # @return [Router] Returns self for chaining.
-      def get(path, options = {})
-        add_route(path, build_route_options(options, :get))
-        self
-      end
-
-      # Define a POST route.
-      #
-      # @param path [String] The path for the route.
-      # @param options [Hash] The options for the route.
-      # @return [Router] Returns self for chaining.
-      def post(path, options = {})
-        add_route(path, build_route_options(options, :post))
-        self
-      end
-
-      # Define a PUT route.
-      #
-      # @param path [String] The path for the route.
-      # @param options [Hash] The options for the route.
-      # @return [Router] Returns self for chaining.
-      def put(path, options = {})
-        add_route(path, build_route_options(options, :put))
-        self
-      end
-
-      # Define a PATCH route.
-      #
-      # @param path [String] The path for the route.
-      # @param options [Hash] The options for the route.
-      # @return [Router] Returns self for chaining.
-      def patch(path, options = {})
-        add_route(path, build_route_options(options, :patch))
-        self
-      end
-
-      # Define a DELETE route.
-      #
-      # @param path [String] The path for the route.
-      # @param options [Hash] The options for the route.
-      # @return [Router] Returns self for chaining.
-      def delete(path, options = {})
-        add_route(path, build_route_options(options, :delete))
-        self
+      # Metaprogram `get`, `post`, `put`, `patch`, `delete` for DRYness.
+      # These methods define a route for a specific HTTP verb.
+      %i[get post put patch delete].each do |verb|
+        define_method(verb) do |path, options = {}|
+          add_route(path, build_route_options(options, verb))
+          self
+        end
       end
 
       # Define a route for multiple HTTP methods.

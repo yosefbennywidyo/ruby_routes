@@ -25,33 +25,43 @@ module RubyRoutes
       # @return [void]
       def define_resource_routes(resource_name, options = {}, &nested_block)
         meta = resource_meta(resource_name, options)
-        opts = prepare_options(options)
+        resource_opts = prepare_resource_options(options)
 
         push_scope(path: "/#{meta[:resource_path]}") do
-          build_routes(opts, meta)
-          handle_nested_option(options, opts)
+          define_resource_actions(resource_opts, meta[:controller])
+          handle_nested_option(options, resource_opts)
           apply_nested_block(nested_block)
         end
       end
 
       private
 
-      # Prepare options by removing the `:to` key if present.
+      # Prepare options for resource routes, removing the `:to` key to avoid conflicts.
+      # This avoids creating a new hash if it's not necessary.
       #
       # @param options [Hash] The options hash.
       # @return [Hash] The prepared options.
-      def prepare_options(options)
-        options.key?(:to) ? options.dup.tap { |h| h.delete(:to) } : options
+      def prepare_resource_options(options)
+        options.key?(:to) ? options.except(:to) : options
       end
 
-      # Build collection and member routes for a resource.
+      # Defines the seven standard RESTful actions for a resource.
+      # This method is data-driven to reduce duplication and improve clarity.
       #
-      # @param opts [Hash] The options hash.
-      # @param meta [Hash] The resource metadata.
+      # @param resource_opts [Hash] The options for the resource routes.
+      # @param controller [String] The controller name for the actions.
+      # @param member_param [String] The parameter name for member routes (e.g., ':id').
       # @return [void]
-      def build_routes(opts, meta)
-        build_collection_routes(opts, meta[:to_index], meta[:to_new], meta[:to_create])
-        build_member_routes(opts, meta[:to_show], meta[:to_edit], meta[:to_update], meta[:to_destroy])
+      def define_resource_actions(resource_opts, controller, member_param: ':id')
+        # Collection routes
+        add_route('',     build_route_options(resource_opts, :get,    "#{controller}#index"))
+        add_route('/new', build_route_options(resource_opts, :get,    "#{controller}#new"))
+        add_route('',     build_route_options(resource_opts, :post,   "#{controller}#create"))
+        # Member routes
+        add_route("/#{member_param}",      build_route_options(resource_opts, :get,    "#{controller}#show"))
+        add_route("/#{member_param}/edit", build_route_options(resource_opts, :get,    "#{controller}#edit"))
+        add_route("/#{member_param}",      resource_opts.merge(via: %i[put patch], to: "#{controller}#update"))
+        add_route("/#{member_param}",      build_route_options(resource_opts, :delete, "#{controller}#destroy"))
       end
 
       # Apply a nested block of routes within the scope of a resource.
@@ -103,35 +113,11 @@ module RubyRoutes
 
         nested_name = options[:nested].to_s
         nested_path = RubyRoutes::Utility::InflectorUtility.pluralize(nested_name)
-        build_nested_routes(nested_path, opts)
-      end
-
-      # Build nested resource routes.
-      #
-      # @param nested_path [String] The path for the nested resource.
-      # @param opts [Hash] The options hash.
-      # @return [void]
-      def build_nested_routes(nested_path, opts)
         push_scope(path: '/:id') do
           push_scope(path: "/#{nested_path}") do
-            add_nested_routes(nested_path, opts)
+            define_resource_actions(opts, nested_path, member_param: ':nested_id')
           end
         end
-      end
-
-      # Add routes for a nested resource.
-      #
-      # @param nested_path [String] The path for the nested resource.
-      # @param opts [Hash] The options hash.
-      # @return [void]
-      def add_nested_routes(nested_path, opts)
-        add_route('',                 build_route_options(opts, :get,    "#{nested_path}#index"))
-        add_route('/new',             build_route_options(opts, :get,    "#{nested_path}#new"))
-        add_route('',                 build_route_options(opts, :post,   "#{nested_path}#create"))
-        add_route('/:nested_id',      build_route_options(opts, :get,    "#{nested_path}#show"))
-        add_route('/:nested_id/edit', build_route_options(opts, :get,    "#{nested_path}#edit"))
-        add_route('/:nested_id',      opts.merge(via: %i[put patch], to: "#{nested_path}#update"))
-        add_route('/:nested_id',      build_route_options(opts, :delete, "#{nested_path}#destroy"))
       end
     end
   end
