@@ -5,7 +5,6 @@ module RubyRoutes
     # Inserter module for adding routes to the RadixTree.
     # Handles tokenization, node advancement, and endpoint finalization.
     module Inserter
-      private
 
       # Inserts a route into the RadixTree for the given path and HTTP methods.
       #

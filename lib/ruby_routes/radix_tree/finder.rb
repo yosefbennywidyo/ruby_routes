@@ -8,6 +8,20 @@ module RubyRoutes
     # Handles path normalization, segment traversal, and parameter extraction.
     module Finder
 
+      # Pre-allocated buffers to minimize object creation
+      EMPTY_PARAMS = {}.freeze
+      TRAVERSAL_STATE_TEMPLATE = {
+        current: nil,
+        best_node: nil,
+        best_params: nil,
+        best_captured: nil,
+        matched: false
+      }.freeze
+
+      # Reusable hash for captured parameters to avoid repeated allocations
+      @captured_params_buffer = {}.freeze
+      @params_buffer = {}.freeze
+
       # Evaluate constraint rules for a candidate route.
       #
       # @param route_handler [Object]
@@ -18,14 +32,12 @@ module RubyRoutes
 
         begin
           # Use a duplicate to avoid unintended mutation by validators.
-          route_handler.validate_constraints_fast!(captured_params)
+          route_handler.validate_constraints_fast!(captured_params.dup)
           true
         rescue RubyRoutes::ConstraintViolation
           false
         end
       end
-
-      private
 
       # Finds a route handler for the given path and HTTP method.
       #
@@ -34,11 +46,13 @@ module RubyRoutes
       # @param params_out [Hash] optional output hash for captured parameters
       # @return [Array] [handler, params] or [nil, params] if no match
       def find(path_input, method_input, params_out = nil)
-        path = path_input.to_s
-        method = normalize_http_method(method_input)
-        return root_match(method, params_out) if path.empty? || path == RubyRoutes::Constant::ROOT_PATH
+        # Handle nil or empty path input
+        return [nil, params_out || {}] if path_input.nil?
 
-        segments = split_path_cached(path)
+        method = normalize_http_method(method_input)
+        return root_match(method, params_out) if path_input.empty? || path_input == RubyRoutes::Constant::ROOT_PATH
+
+        segments = split_path_cached(path_input)
         return [nil, params_out || {}] if segments.empty?
 
         params = params_out || {}
@@ -93,13 +107,10 @@ module RubyRoutes
       # @param segments [Array<String>] all segments
       # @param params [Hash] parameters hash
       # @param captured_params [Hash] hash to collect captured parameters
-      # @return [Array] [next_node, stop_traversal, segment_captured]
+      # @return [Array] [next_node, stop_traversal]
       def traverse_for_segment(node, segment, index, segments, params, captured_params)
         next_node, stop, segment_captured = node.traverse_for(segment, index, segments, params)
-        if segment_captured
-          params.merge!(segment_captured)  # Merge into running params hash at each step
-          captured_params.merge!(segment_captured)  # Keep for best candidate consistency
-        end
+        merge_captured_params(params, captured_params, segment_captured)
         [next_node, stop]
       end
 
@@ -111,7 +122,7 @@ module RubyRoutes
       # @param captured_params [Hash] captured parameters from traversal
       def record_candidate(state, _method, params, captured_params)
         state[:best_node] = state[:current]
-        state[:best_params] = params.dup
+        state[:best_params] = params
         state[:best_captured] = captured_params.dup
       end
 
@@ -181,7 +192,7 @@ module RubyRoutes
 
         if node && endpoint_with_method?(node, method)
           handler = node.handlers[method]
-          if check_constraints(handler, params)
+          if check_constraints(handler, captured_params)
             return [handler, params]
           end
         end
@@ -205,7 +216,19 @@ module RubyRoutes
       # @param params [Hash] the final parameters hash
       # @param captured_params [Hash] captured parameters from traversal
       def apply_captured_params(params, captured_params)
-        params.merge!(captured_params) if captured_params && !captured_params.empty?
+        merge_captured_params(params, params, captured_params)
+      end
+
+      # Merges captured parameters into the parameter hashes.
+      #
+      # @param params [Hash] the main parameters hash
+      # @param captured_params [Hash] the captured parameters hash
+      # @param segment_captured [Hash] the newly captured parameters
+      def merge_captured_params(params, captured_params, segment_captured)
+        return unless segment_captured && !segment_captured.empty?
+
+        params.merge!(segment_captured)
+        captured_params.merge!(segment_captured)
       end
     end
   end
