@@ -32,10 +32,11 @@ module RubyRoutes
       #   normalize_path('/users')   # => "/users"
       #   normalize_path('/')        # => "/"
       def normalize_path(raw_path)
-        normalized_path = raw_path.to_s
-        normalized_path = "/#{normalized_path}" unless normalized_path.start_with?('/')
-        normalized_path = normalized_path[0..-2] if normalized_path.length > 1 && normalized_path.end_with?('/')
-        normalized_path
+        return '/' if raw_path.nil? || raw_path.empty?
+
+        path = raw_path.start_with?('/') ? raw_path : "/#{raw_path}"
+        path = path.chomp('/') unless path == '/'
+        path
       end
 
       # Normalize HTTP method to uppercase String (fast path).

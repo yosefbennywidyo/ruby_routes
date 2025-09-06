@@ -49,38 +49,18 @@ module RubyRoutes
         # - Records it in the nested pool.
         # - Tracks insertion in a fixed ring; when full, overwrites oldest.
         #
-        # @param http_method [String] The HTTP method (e.g., "GET").
         # @param request_path [String] The request path (e.g., "/users").
         # @return [String] A frozen canonical key.
         def fetch_request_key(http_method, request_path)
           @mutex.synchronize do
-            method_key, path_key = prepare_keys(http_method, request_path)
-
+            method_key = http_method.freeze
+            path_key = request_path.to_s.freeze
             bucket = @request_key_pool[method_key] ||= {}
-            return bucket[path_key] if bucket[path_key]
-
-            handle_cache_miss(bucket, method_key, path_key)
+            bucket[path_key] || create_and_cache_key(bucket, method_key, path_key)
           end
         end
 
-        private
-
-        # Prepare keys by freezing them if necessary.
-        #
-        # @param http_method [String] The HTTP method.
-        # @param request_path [String] The request path.
-        # @return [Array<String>] An array containing the frozen method and path keys.
-        def prepare_keys(http_method, request_path)
-          [http_method, request_path]
-        end
-
-        # Handle a cache miss by creating a composite key and updating the ring buffer.
-        #
-        # @param bucket [Hash] The bucket for the method key.
-        # @param method_key [String] The HTTP method key.
-        # @param path_key [String] The path key.
-        # @return [String] The composite key.
-        def handle_cache_miss(bucket, method_key, path_key)
+        def create_and_cache_key(bucket, method_key, path_key)
           composite = "#{method_key}:#{path_key}".freeze
           bucket[path_key] = composite
           handle_ring_buffer(method_key, path_key)
