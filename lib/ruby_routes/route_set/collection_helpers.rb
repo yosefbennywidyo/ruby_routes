@@ -12,7 +12,7 @@ module RubyRoutes
       # Add a route object to internal structures.
       #
       # This method adds a route to the internal route collection, updates the
-      # radix tree for fast path/method lookups, and registers the route in the
+      # matching strategy for fast path/method lookups, and registers the route in the
       # named routes collection if it has a name.
       #
       # @param route [Route] The route to add.
@@ -21,7 +21,7 @@ module RubyRoutes
         return route if @routes.include?(route) # Prevent duplicate insertion
 
         @named_routes[route.name] = route if route.named?
-        @radix_tree.add(route.path, route.methods, route)
+        @strategy.add(route)
         @routes << route
         route
       end
@@ -40,14 +40,14 @@ module RubyRoutes
 
       # Find any route (no params) for a method/path.
       #
-      # This method searches the radix tree for a route matching the given HTTP
+      # This method searches the matching strategy for a route matching the given HTTP
       # method and path.
       #
       # @param http_method [String, Symbol] The HTTP method (e.g., `:get`, `:post`).
       # @param path [String] The path to match.
       # @return [Route, nil] The matching route, or `nil` if no match is found.
       def find_route(http_method, path)
-        route, _params = @radix_tree.find(path, http_method)
+        route, _params = @strategy.find(path, http_method)
         route
       end
 
@@ -69,19 +69,18 @@ module RubyRoutes
       # Clear all routes and caches.
       #
       # This method clears the internal route collection, named routes, recognition
-      # cache, and radix tree. It also resets cache hit/miss counters and clears
+      # cache, and matching strategy. It also resets cache hit/miss counters and clears
       # the global request key cache.
       #
       # @return [void]
       def clear!
-        @cache_mutex ||= Mutex.new
         @cache_mutex.synchronize do
           @routes.clear
           @named_routes.clear
           @recognition_cache.clear
           @cache_hits = 0
           @cache_misses = 0
-          @radix_tree = RadixTree.new
+          @strategy = @strategy_class.new
           RubyRoutes::Utility::KeyBuilderUtility.clear!
         end
       end

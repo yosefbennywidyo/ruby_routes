@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative '../route/small_lru'
+
 module RubyRoutes
   class RouteSet
     # CacheHelpers: extracted cache, request-key, and eviction logic to reduce
@@ -40,6 +42,8 @@ module RubyRoutes
         @recognition_cache_max = 2048
         @cache_hits = 0
         @cache_misses = 0
+        @gen_cache = RubyRoutes::Route::SmallLru.new(512)
+        @query_cache = RubyRoutes::Route::SmallLru.new(RubyRoutes::Constant::QUERY_CACHE_SIZE)
         @cache_mutex = Mutex.new
       end
 
