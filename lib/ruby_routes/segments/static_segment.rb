@@ -26,7 +26,7 @@ module RubyRoutes
       # @param raw_segment_text [String] literal segment token
       def initialize(raw_segment_text)
         super(raw_segment_text)
-        @literal_text = raw_segment_text
+        @literal_text = raw_segment_text.freeze
       end
 
       # Ensure a static child node for this literal under +parent_node+.
