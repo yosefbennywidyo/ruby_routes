@@ -25,18 +25,18 @@ module RubyRoutes
       # Append a segment to the buffer.
       #
       # @param buffer [String] the buffer to append to
-      # @param segment [Hash] the segment to append
+      # @param segment [RubyRoutes::Segments::BaseSegment] the segment to append
       # @param merged [Hash] the merged parameters
       # @param index [Integer] the current index
       # @param last_index [Integer] the last index
       def append_segment(buffer, segment, merged, index, last_index)
-        case segment[:type]
-        when :static
-          buffer << segment[:value]
-        when :param
-          buffer << encode_segment_fast(merged.fetch(segment[:name]).to_s)
-        when :splat
-          buffer << format_splat_value(merged.fetch(segment[:name], ''))
+        case segment
+        when RubyRoutes::Segments::StaticSegment
+          buffer << segment.instance_variable_get(:@literal_text)
+        when RubyRoutes::Segments::DynamicSegment
+          buffer << encode_segment_fast(merged.fetch(segment.param_name).to_s)
+        when RubyRoutes::Segments::WildcardSegment
+          buffer << format_splat_value(merged.fetch(segment.param_name, ''))
         end
         buffer << '/' unless index == last_index
       end
@@ -48,8 +48,8 @@ module RubyRoutes
         # Rough heuristic (static sizes + average dynamic)
         base = 1
         @compiled_segments.each do |segment|
-          base += case segment[:type]
-                  when :static then segment[:value].length + 1
+          base += case segment
+                  when RubyRoutes::Segments::StaticSegment then segment.instance_variable_get(:@literal_text).length + 1
                   else 20
                   end
         end

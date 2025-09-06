@@ -48,20 +48,14 @@ module RubyRoutes
       def validate_required_once(params)
         return if @required_params.empty?
 
-        # Check cache for existing validation result
         cached_result = get_cached_validation(params)
         if cached_result
           missing, nils = cached_result
         else
-          # Perform validation
           missing, nils = validate_required_params(params)
-          # Cache the result only if params are frozen
-          if params.frozen?
-            cache_validation_result(params, [missing, nils])
-          end
+      cache_validation_result(params.freeze, [missing, nils])
         end
 
-        # Raise if invalid
         raise RouteNotFound, "Missing params: #{missing.join(', ')}" unless missing.empty?
         raise RouteNotFound, "Missing or nil params: #{nils.join(', ')}" unless nils.empty?
       end

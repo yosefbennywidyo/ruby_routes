@@ -25,8 +25,8 @@ module RubyRoutes
         return @static_path if static_short_circuit?(params)
         return @static_path || RubyRoutes::Constant::ROOT_PATH if trivial_route?
 
-        validate_required_once(params)
         merged_params = build_merged_params(params)
+        validate_required_once(merged_params.dup)
 
         build_or_fetch_generated_path(merged_params)
       end
