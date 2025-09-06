@@ -1,11 +1,12 @@
 # frozen_string_literal: true
 
-require_relative 'radix_tree'
+require_relative 'strategies'
 require_relative 'utility/key_builder_utility'
 require_relative 'utility/method_utility'
 require_relative 'route_set/cache_helpers'
 require_relative 'route_set/collection_helpers'
 require_relative 'route/param_support'
+require_relative 'route/path_generation'
 
 module RubyRoutes
   # RouteSet
@@ -17,7 +18,7 @@ module RubyRoutes
   # - Index named routes.
   # - Provide fast recognition (method + path → route, params) with
   #   a small in‑memory recognition cache.
-  # - Delegate structural path matching to an internal RadixTree.
+  # - Delegate structural path matching to a configurable strategy.
   #
   # Thread Safety:
   # - RouteSet instances are not fully thread-safe for modifications.
@@ -33,14 +34,16 @@ module RubyRoutes
     include RubyRoutes::Utility::MethodUtility
     include RubyRoutes::RouteSet::CacheHelpers
     include RubyRoutes::Route::ParamSupport
+    include RubyRoutes::Route::PathGeneration
     include RubyRoutes::RouteSet::CollectionHelpers
 
     # Initialize empty collection and caches.
     #
+    # @param strategy [Class] The matching strategy to use.
     # @return [void]
-    def initialize
+    def initialize(strategy: Strategies::HybridStrategy)
       setup_caches
-      setup_radix_tree
+      setup_strategy(strategy)
     end
 
     # Recognize a request (method + path) returning route + params.
@@ -49,15 +52,14 @@ module RubyRoutes
     # @param path [String] The request path.
     # @return [Hash, nil] A hash containing the matched route and parameters, or `nil` if no match is found.
     def match(http_method, path)
-      normalized_method = normalize_method_for_match(http_method)
-      raw_path = path.to_s
-      lookup_key = cache_key_for_request(normalized_method, raw_path)
+      normalized_method = normalize_http_method(http_method)
+      lookup_key = cache_key_for_request(normalized_method, path.to_s)
 
       if (cached_result = fetch_cached_recognition(lookup_key))
         return cached_result
       end
 
-      result = perform_match(normalized_method, raw_path)
+      result = perform_match(normalized_method, path.to_s)
       insert_cache_entry(lookup_key, result) if result
       result
     end
@@ -77,8 +79,7 @@ module RubyRoutes
     # @param params [Hash] The parameters for path generation.
     # @return [String] The generated path.
     def generate_path(name, params = {})
-      route = find_named_route(name)
-      route.generate_path(params)
+      generate_path_from_route(find_named_route(name), params)
     end
 
     # Generate path from a direct route reference.
@@ -92,23 +93,13 @@ module RubyRoutes
 
     private
 
-    # Set up the radix tree for structural path matching.
+    # Set up the matching strategy.
     #
+    # @param strategy [Class] The matching strategy class.
     # @return [void]
-    def setup_radix_tree
-      @radix_tree = RadixTree.new
-    end
-
-    # Normalize the HTTP method for matching.
-    #
-    # @param http_method [String, Symbol] The HTTP method.
-    # @return [String] The normalized HTTP method.
-    def normalize_method_for_match(http_method)
-      if http_method.is_a?(String) && normalize_http_method(http_method).equal?(http_method)
-        http_method
-      else
-        normalize_http_method(http_method)
-      end
+    def setup_strategy(strategy)
+      @strategy_class = strategy
+      @strategy = @strategy_class.new
     end
 
     # Perform the route matching process.
@@ -117,31 +108,33 @@ module RubyRoutes
     # @param raw_path [String] The raw request path.
     # @return [Hash, nil] A hash containing the matched route and parameters, or `nil` if no match is found.
     def perform_match(normalized_method, raw_path)
-      path_without_query, _query = raw_path.split('?', 2)
-      matched_route, extracted_params = @radix_tree.find(path_without_query, normalized_method)
+      path_without_query = raw_path.split('?', 2).first
+      matched_route, path_params = @strategy.find(path_without_query, normalized_method)
       return nil unless matched_route
 
-      # Ensure we have a mutable hash for merging defaults / query params.
-      if extracted_params.nil?
-        extracted_params = {}
-      elsif extracted_params.frozen?
-        extracted_params = extracted_params.dup
-      end
-
-      merge_query_params(matched_route, raw_path, extracted_params)
-      merge_defaults(matched_route, extracted_params)
-      build_match_result(matched_route, extracted_params)
+      final_params = build_final_params(matched_route, path_params, raw_path)
+      build_match_result(matched_route, final_params)
     end
 
-    # Merge default parameters into the extracted parameters.
+    # Build the final parameters hash by merging path, query, and default params.
     #
     # @param matched_route [Route] The matched route.
-    # @param extracted_params [Hash] The extracted parameters.
-    # @return [void]
-    def merge_defaults(matched_route, extracted_params)
-      return unless matched_route.respond_to?(:defaults) && matched_route.defaults
+    # @param path_params [Hash] The parameters extracted from the path.
+    # @param raw_path [String] The full request path including query string.
+    # @return [Hash] The final, merged parameters hash.
+    def build_final_params(matched_route, path_params, raw_path)
+      # Start with a mutable copy of path_params or a new hash.
+      final_params = path_params&.frozen? ? path_params.dup : (path_params || {})
 
-      matched_route.defaults.each { |key, value| extracted_params[key] = value unless extracted_params.key?(key) }
+      # Merge query parameters if any exist.
+      matched_route.merge_query_params_into_hash(final_params, raw_path, nil)
+
+      # Merge default parameters, which have the lowest precedence.
+      if matched_route.respond_to?(:defaults) && (defaults = matched_route.defaults)
+        defaults.each { |key, value| final_params[key] = value unless final_params.key?(key) }
+      end
+
+      final_params
     end
 
     # Build the match result hash.
@@ -156,24 +149,6 @@ module RubyRoutes
         controller: matched_route.controller,
         action: matched_route.action
       }
-    end
-
-    # Obtain a pooled hash for temporary parameters.
-    #
-    # @return [Hash] A thread-local hash for temporary parameter storage.
-    def thread_local_params
-      thread_params = Thread.current[:ruby_routes_params_pool] ||= []
-      thread_params.empty? ? {} : thread_params.pop.clear
-    end
-
-    # Return a parameters hash to the thread-local pool.
-    #
-    # @param params [Hash] The parameters hash to return.
-    # @return [void]
-    def return_params_to_pool(params)
-      params.clear
-      thread_pool = Thread.current[:ruby_routes_params_pool] ||= []
-      thread_pool << params if thread_pool.size < 10 # Limit pool size
     end
   end
 end

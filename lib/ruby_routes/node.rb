@@ -1,7 +1,13 @@
+# frozen_string_literal: true
+
 require_relative 'segment'
+require_relative 'utility/method_utility'
+require_relative 'constant'
 
 module RubyRoutes
   class Node
+    include RubyRoutes::Utility::MethodUtility
+
     attr_accessor :param_name, :is_endpoint, :dynamic_child, :wildcard_child
     attr_reader :handlers, :static_children
 
@@ -15,43 +21,24 @@ module RubyRoutes
     end
 
     def add_handler(method, handler)
-      method_str = normalize_method(method)
+      method_str = normalize_http_method(method)
       @handlers[method_str] = handler
       @is_endpoint = true
     end
 
     def get_handler(method)
-      @handlers[normalize_method(method)]
+      @handlers[normalize_http_method(method)]
     end
 
     def traverse_for(segment, index, segments, params)
-      # Try static child first (most specific)
-      if @static_children.key?(segment)
-        return [@static_children[segment], false, {}]
-      # Try dynamic child (less specific)
-      elsif @dynamic_child
-        # Capture parameter if params hash provided
-        captured = {}
-        captured[@dynamic_child.param_name] = segment if @dynamic_child.param_name
-        return [@dynamic_child, false, captured]
-      # Try wildcard child (least specific)
-      elsif @wildcard_child
-        # Capture remaining path segments
-        captured = {}
-        if @wildcard_child.param_name
-          remaining = segments[index..-1]
-          captured[@wildcard_child.param_name] = remaining.join('/')
-        end
-        return [@wildcard_child, true, captured] # true signals to stop traversal
-      end
+      # Prioritize static matches, then dynamic, then wildcard.
+      # This logic is now more aligned with the Segment strategy pattern.
+      static_child = @static_children[segment]
+      return [static_child, false, Constant::EMPTY_HASH] if static_child
+      return [@dynamic_child, false, { @dynamic_child.param_name => segment }] if @dynamic_child
+      return [@wildcard_child, true, { @wildcard_child.param_name => segments[index..-1].join('/') }] if @wildcard_child
 
-      [nil, false, {}]
-    end
-
-    private
-
-    def normalize_method(method)
-      method.to_s.upcase
+      Constant::NO_TRAVERSAL_RESULT
     end
   end
 end

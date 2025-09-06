@@ -105,7 +105,7 @@ module RubyRoutes
     # recently used entries will be evicted.
     #
     # @return [Integer]
-    QUERY_CACHE_SIZE = 128
+    QUERY_CACHE_SIZE = 2048
 
     METHOD_CACHE_MAX_SIZE = 1000
 
