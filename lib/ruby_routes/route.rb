@@ -142,14 +142,12 @@ module RubyRoutes
     #
     # @return [void]
     def compile_required_params
-      dynamic_param_names   = @compiled_segments.filter_map { |segment| segment.param_name if segment.respond_to?(:param_name) && segment.param_name }
+      dynamic_param_names   = @compiled_segments.filter_map { |segment| segment.param_name }
       @param_names          = dynamic_param_names.freeze
       @required_params      = if @defaults.empty?
                                 dynamic_param_names.freeze
                               else
-                                dynamic_param_names.reject do |name|
-                                  @defaults.key?(name) || (@defaults.key?(name.to_sym) if name.is_a?(String))
-                                end.freeze
+                                dynamic_param_names.reject { |name| @defaults.key?(name) }.freeze
                               end
       @required_params_set  = @required_params.to_set.freeze
     end
