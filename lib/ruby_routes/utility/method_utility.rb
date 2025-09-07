@@ -42,7 +42,7 @@ module RubyRoutes
       # Now uses SmallLru for LRU eviction instead of simple clearing.
       #
       # @return [SmallLru]
-      METHOD_CACHE = RubyRoutes::Route::SmallLru.new(RubyRoutes::Constant::METHOD_CACHE_MAX_SIZE)
+      METHOD_CACHE = RubyRoutes::Route::SmallLru.new(RubyRoutes::Constant::CACHE_SIZE)
 
       # Normalize an HTTP method‑like input to a canonical uppercase `String`.
       #

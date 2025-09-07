@@ -30,7 +30,7 @@ module RubyRoutes
         lru.increment_hits
         # Internal storage name (@hash) is intentionally accessed reflectively
         # to keep strategy decoupled from public API surface.
-        store = lru.instance_variable_get(:@hash)
+        store = lru.hash
         value = store.delete(key)
         store[key] = value
         value

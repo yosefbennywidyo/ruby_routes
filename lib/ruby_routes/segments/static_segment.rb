@@ -23,6 +23,8 @@ module RubyRoutes
     #
     # @api internal
     class StaticSegment < BaseSegment
+      attr_reader :literal_text
+
       # @param raw_segment_text [String] literal segment token
       def initialize(raw_segment_text)
         super(raw_segment_text)
