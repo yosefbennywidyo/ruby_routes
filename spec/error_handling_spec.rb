@@ -98,7 +98,7 @@ RSpec.describe 'Error Handling and Edge Cases' do
     end
 
     it 'handles clearing empty route set' do
-      expect { route_set.clear! }.not_to raise_error
+      expect { route_set.clear_counters! }.not_to raise_error
       expect(route_set.empty?).to be true
     end
 
