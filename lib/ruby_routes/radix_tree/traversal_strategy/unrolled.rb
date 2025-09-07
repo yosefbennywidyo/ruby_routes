@@ -7,7 +7,7 @@ module RubyRoutes
     module TraversalStrategy
       # Traversal strategy using unrolled loops for common short paths (1-3 segments).
       # This provides a performance boost by avoiding loop overhead for the most frequent cases.
-      class OptimizedUnrolled < Base
+      class Unrolled < Base
         def execute(segments, state, method, params, captured_params)
           # This case statement manually unrolls the traversal loop for paths
           # with 1, 2, or 3 segments. The `TraversalStrategy.for` factory ensures

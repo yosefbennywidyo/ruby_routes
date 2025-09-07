@@ -16,7 +16,7 @@ module RubyRoutes
       # @return [Base] An instance of a traversal strategy.
       def self.for(segment_count, finder)
         if segment_count <= 3
-          OptimizedUnrolled.new(finder)
+          Unrolled.new(finder)
         else
           GenericLoop.new(finder)
         end

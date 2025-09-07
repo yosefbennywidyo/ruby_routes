@@ -20,8 +20,9 @@ module RubyRoutes
       }.freeze
 
       # Reusable hash for captured parameters to avoid repeated allocations
-      @captured_params_buffer = {}.freeze
-      @params_buffer = {}.freeze
+      PARAMS_BUFFER_KEY = :ruby_routes_finder_params_buffer
+      CAPTURED_PARAMS_BUFFER_KEY = :ruby_routes_finder_captured_params_buffer
+      STATE_BUFFER_KEY = :ruby_routes_finder_state_buffer
 
       # Evaluate constraint rules for a candidate route.
       #
@@ -45,20 +46,21 @@ module RubyRoutes
       # @param path_input [String] the input path to match
       # @param method_input [String, Symbol] the HTTP method
       # @param params_out [Hash] optional output hash for captured parameters
-      # @return [Array] [handler, params] or [nil, params] if no match
-      def find(path_input, method_input, params_out = nil)
+      # @return [Array] [handler, params] or [nil, {}] if no match
+      def find(path_input, http_method, params_out = nil)
         # Handle nil or empty path input
-        return [nil, params_out || {}] if path_input.nil?
+        return [nil, EMPTY_PARAMS] if path_input.nil?
 
-        method = normalize_http_method(method_input)
-        return root_match(method, params_out) if path_input.empty? || path_input == RubyRoutes::Constant::ROOT_PATH
+        method = normalize_http_method(http_method)
+        return root_match(method, params_out || EMPTY_PARAMS) if path_input.empty? || path_input == RubyRoutes::Constant::ROOT_PATH
 
         segments = split_path_cached(path_input)
-        return [nil, params_out || {}] if segments.empty?
+        return [nil, EMPTY_PARAMS] if segments.empty?
 
-        params = params_out || {}
-        state = traversal_state
-        captured_params = {}
+        # Use thread-local, reusable hashes to avoid allocations
+        params = acquire_params_buffer(params_out)
+        state = acquire_state_buffer
+        captured_params = acquire_captured_params_buffer
 
         result = perform_traversal(segments, state, method, params, captured_params)
         return result unless result.nil?
@@ -69,14 +71,24 @@ module RubyRoutes
       # Initializes the traversal state for route matching.
       #
       # @return [Hash] state hash with :current, :best_node, :best_params, :best_captured, :matched
-      def traversal_state
-        {
-          current: @root,
-          best_node: nil,
-          best_params: nil,
-          best_captured: nil,
-          matched: false # Track if any segment was successfully matched
-        }
+      def acquire_state_buffer
+        state = Thread.current[STATE_BUFFER_KEY] ||= {}
+        state.clear
+        state[:current] = @root
+        state
+      end
+
+      def acquire_params_buffer(initial_params)
+        buffer = Thread.current[PARAMS_BUFFER_KEY] ||= {}
+        buffer.clear
+        buffer.merge!(initial_params) if initial_params
+        buffer
+      end
+
+      def acquire_captured_params_buffer
+        buffer = Thread.current[CAPTURED_PARAMS_BUFFER_KEY] ||= {}
+        buffer.clear
+        buffer
       end
 
       # Performs traversal through path segments to find a matching route.
@@ -198,9 +210,9 @@ module RubyRoutes
       # @return [Array] [handler, params] or [nil, params]
       def root_match(method, params_out)
         if @root.is_endpoint && (handler = @root.handlers[method])
-          [handler, params_out || {}]
+          [handler, params_out]
         else
-          [nil, params_out || {}]
+          [nil, EMPTY_PARAMS]
         end
       end
 
@@ -218,7 +230,7 @@ module RubyRoutes
       # @param captured_params [Hash] the captured parameters hash
       # @param segment_captured [Hash] the newly captured parameters
       def merge_captured_params(params, captured_params, segment_captured)
-        return unless segment_captured && !segment_captured.empty?
+        return if segment_captured.empty?
 
         params.merge!(segment_captured)
         captured_params.merge!(segment_captured)
