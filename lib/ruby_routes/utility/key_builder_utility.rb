@@ -27,6 +27,8 @@ module RubyRoutes
       # @!visibility private
       @entry_count = 0
       # @!visibility private
+      # Use SmallLru for efficient, bounded request key caching.
+      @request_key_cache = RubyRoutes::Route::SmallLru.new(RubyRoutes::Constant::REQUEST_KEY_CAPACITY)
       @mutex = Mutex.new
 
       class << self
@@ -39,6 +41,7 @@ module RubyRoutes
             @request_key_ring.fill(nil)
             @entry_count = 0
             @ring_index = 0
+            @request_key_cache = RubyRoutes::Route::SmallLru.new(RubyRoutes::Constant::REQUEST_KEY_CAPACITY)
           end
         end
 
@@ -52,11 +55,21 @@ module RubyRoutes
         # @param request_path [String] The request path (e.g., "/users").
         # @return [String] A frozen canonical key.
         def fetch_request_key(http_method, request_path)
+          # Build a candidate key first, outside the mutex, to minimize lock time.
+          # This key is not frozen yet as it might not be the one we use.
+          candidate_key = "#{http_method}:#{request_path}"
+
           @mutex.synchronize do
-            method_key = http_method.freeze
-            path_key = request_path.to_s.freeze
+            method_key = http_method.to_s.dup.freeze
+            path_key = request_path.to_s.dup.freeze
             bucket = @request_key_pool[method_key] ||= {}
             bucket[path_key] || create_and_cache_key(bucket, method_key, path_key)
+            # Check the cache for an existing, frozen key.
+            cached_key = @request_key_cache.get(candidate_key)
+            return cached_key if cached_key
+
+            # On cache miss, freeze the key and store it.
+            @request_key_cache.set(candidate_key, candidate_key.freeze)
           end
         end
 

@@ -34,7 +34,7 @@ module RubyRoutes
 
         begin
           # Use a duplicate to avoid unintended mutation by validators.
-          route_handler.validate_constraints_fast!(captured_params.dup)
+          route_handler.validate_constraints_fast!(captured_params)
           true
         rescue RubyRoutes::ConstraintViolation
           false
@@ -128,7 +128,7 @@ module RubyRoutes
       def record_candidate(state, _method, params, captured_params)
         state[:best_node] = state[:current]
         state[:best_params] = params
-        state[:best_captured] = captured_params.dup
+        state[:best_captured] = captured_params
       end
 
       # Checks if the node is an endpoint with a handler for the method.
@@ -221,7 +221,8 @@ module RubyRoutes
       # @param params [Hash] the final parameters hash
       # @param captured_params [Hash] captured parameters from traversal
       def apply_captured_params(params, captured_params)
-        merge_captured_params(params, params, captured_params)
+        # Merge all captured into final params without mutating captured_params
+        merge_captured_params(params, captured_params, captured_params)
       end
 
       # Merges captured parameters into the parameter hashes.
@@ -230,7 +231,7 @@ module RubyRoutes
       # @param captured_params [Hash] the captured parameters hash
       # @param segment_captured [Hash] the newly captured parameters
       def merge_captured_params(params, captured_params, segment_captured)
-        return if segment_captured.empty?
+        return if segment_captured.nil? || segment_captured.empty?
 
         params.merge!(segment_captured)
         captured_params.merge!(segment_captured)
