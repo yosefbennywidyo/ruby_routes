@@ -611,7 +611,8 @@ RSpec.describe RubyRoutes::Route do
       # Verify cache was created
       cache = route.instance_variable_get(:@encoding_cache)
       expect(cache).to be_a(RubyRoutes::Route::SmallLru)
-      expect(cache).to include('John Doe' => 'John%20Doe')
+      expect(cache.get('John Doe')).to eq('John%20Doe')
+      expect(cache.keys).to include('John Doe')
 
       # Call again with same value - should use cache
       allow(URI).to receive(:encode_www_form_component).and_raise('Should not be called')

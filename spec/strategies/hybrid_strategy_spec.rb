@@ -6,7 +6,7 @@ require 'ruby_routes/strategies/hybrid_strategy'
 RSpec.describe RubyRoutes::Strategies::HybridStrategy do
   let(:strategy) { described_class.new }
   let(:static_route) { double('Route', path: '/users', methods: ['GET']) }
-  let(:dynamic_route) { double('Route', path: '/users/:id', match_method?: true) }
+  let(:dynamic_route) { double('Route', path: '/users/:id', methods: ['GET']) }
 
   describe '#add' do
     it 'adds static routes to hash storage' do
@@ -16,7 +16,11 @@ RSpec.describe RubyRoutes::Strategies::HybridStrategy do
 
     it 'adds dynamic routes to radix tree storage' do
       strategy.add(dynamic_route)
-      # This would need to be adapted based on RadixTree implementation
+      result = strategy.find('/users/42', 'GET')
+      expect(result).not_to be_nil
+      route, params = result
+      expect(route).to be(dynamic_route)
+      expect(params).to include('id' => '42')
     end
   end
 

@@ -69,5 +69,13 @@ RSpec.describe RubyRoutes::Utility::PathUtility do
     it 'handles root path' do
       expect(path_utility.normalize_path('/')).to eq('/')
     end
+
+    it 'handles root path with a query string without raising an error' do
+      # This test validates the fix for a bug where a path like '/?q=1'
+      # would cause a `nil` slice error during path splitting.
+      path = '/?q=1'
+      expect { path_utility.split_path(path) }.not_to raise_error
+      expect(path_utility.split_path(path)).to eq([])
+    end
   end
 end

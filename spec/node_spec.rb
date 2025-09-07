@@ -146,6 +146,31 @@ RSpec.describe RubyRoutes::Node do
       expect(params['path']).to eq('docs/readme.txt')
     end
 
+    it 'passes the params hash to traversal strategies' do
+      # This test verifies the fix for the bug where `traverse_for` did not
+      # pass its `params` argument to the strategies.
+
+      # 1. Create a mock strategy that will capture the arguments it receives.
+      received_args = nil
+      mock_strategy = lambda do |_node, _segment, _index, _segments, params_arg|
+        received_args = params_arg
+        nil # Return nil to allow traversal to continue
+      end
+
+      # 2. Stub the traversal constants to use our mock strategy.
+      # We use `stub_const` because the original TRAVERSAL_STRATEGIES hash is frozen.
+      # This replaces the constant for the duration of the test.
+      stub_const('RubyRoutes::Constant::TRAVERSAL_STRATEGIES', { mock: mock_strategy })
+      stub_const('RubyRoutes::Constant::TRAVERSAL_ORDER', [:mock])
+
+      # 3. Call `traverse_for` with a sample params hash.
+      initial_params = { 'existing' => 'value' }
+      node.traverse_for('segment', 0, ['segment'], initial_params)
+
+      # 4. Assert that the mock strategy received the correct params hash.
+      expect(received_args).to be(initial_params)
+    end
+
     it 'handles wildcard with single remaining segment' do
       # Set up wildcard child
       wildcard_child = RubyRoutes::Node.new

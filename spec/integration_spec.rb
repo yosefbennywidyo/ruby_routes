@@ -236,7 +236,6 @@ RSpec.describe 'Integration Tests' do
         expect(end_time - start_time).to be < 2.0
         # Should have good cache hit rate
         stats = hash_based_router.route_set.cache_stats
-        puts "stats.inspect #{stats.inspect}"
         expect(stats[:hits]).to be > 0
       end
 
@@ -368,15 +367,7 @@ RSpec.describe 'Integration Tests' do
         end
       end
 
-      # Debug: Check if routes are added
-      puts "Total routes added: #{app_hash_based_router.route_set.routes.size}"
-      app_hash_based_router.route_set.routes.each do |route|
-        puts "Route: #{route.methods.join(',')} #{route.path} -> #{route.controller}##{route.action}"
-      end
-
-      # Debug: Test strategy directly for /login
-      matched_route, path_params = app_hash_based_router.route_set.instance_variable_get(:@strategy).find('/login', 'GET')
-      puts "Strategy find for GET /login: #{matched_route ? 'Found' : 'Not Found'} (route: #{matched_route&.path})"
+      app_hash_based_router.route_set.instance_variable_get(:@strategy).find('/login', 'GET')
 
       # Test various routes - exclude dynamic routes for HashBasedStrategy
       test_cases = [
