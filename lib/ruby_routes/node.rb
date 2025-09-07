@@ -32,7 +32,7 @@ module RubyRoutes
 
     def traverse_for(segment, index, segments, params)
       RubyRoutes::Constant::TRAVERSAL_ORDER.each do |strategy_name|
-        result = RubyRoutes::Constant::TRAVERSAL_STRATEGIES[strategy_name].call(self, segment, index, segments)
+        result = RubyRoutes::Constant::TRAVERSAL_STRATEGIES[strategy_name].call(self, segment, index, segments, params)
         return result if result
       end
 

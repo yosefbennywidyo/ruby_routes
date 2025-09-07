@@ -75,17 +75,25 @@ module RubyRoutes
     }.freeze
 
     TRAVERSAL_STRATEGIES = {
-      static: lambda do |node, segment, _index, _segments|
+      static: lambda do |node, segment, _index, _segments, _params|
         static_child = node.static_children[segment]
         [static_child, false, Constant::EMPTY_HASH] if static_child
       end,
-      dynamic: lambda do |node, segment, _index, _segments|
+      dynamic: lambda do |node, segment, _index, _segments, _params|
         dynamic_child = node.dynamic_child
-        [dynamic_child, false, { dynamic_child.param_name => segment }] if dynamic_child
+        if dynamic_child
+          pname = dynamic_child.param_name
+          return [dynamic_child, false, Constant::EMPTY_HASH] unless pname
+          [dynamic_child, false, { pname.to_s => segment }]
+        end
       end,
-      wildcard: lambda do |node, _segment, index, segments|
+      wildcard: lambda do |node, _segment, index, segments, _params|
         wildcard_child = node.wildcard_child
-        [wildcard_child, true, { wildcard_child.param_name => segments[index..-1].join('/') }] if wildcard_child
+        if wildcard_child
+          pname = wildcard_child.param_name
+          return [wildcard_child, true, Constant::EMPTY_HASH] unless pname
+          [wildcard_child, true, { pname.to_s => segments[index..-1].join('/') }]
+        end
       end
     }.freeze
 

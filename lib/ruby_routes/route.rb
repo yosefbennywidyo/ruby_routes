@@ -123,17 +123,6 @@ module RubyRoutes
 
     private
 
-    # Split path into parts.
-    #
-    # @param path [String] The path to split.
-    # @return [Array<String>]
-    def split_path(path)
-      path.split('/').reject(&:empty?)
-    end
-
-    # Expose for testing / external callers.
-    public :extract_path_params_fast
-
     # Precompile route data for performance.
     #
     # @return [void]
