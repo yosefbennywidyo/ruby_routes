@@ -74,6 +74,23 @@ module RubyRoutes
       default: ->(_node, _segment, _idx, _segments, _params) { nil }
     }.freeze
 
+    TRAVERSAL_STRATEGIES = {
+      static: lambda do |node, segment, _index, _segments|
+        static_child = node.static_children[segment]
+        [static_child, false, Constant::EMPTY_HASH] if static_child
+      end,
+      dynamic: lambda do |node, segment, _index, _segments|
+        dynamic_child = node.dynamic_child
+        [dynamic_child, false, { dynamic_child.param_name => segment }] if dynamic_child
+      end,
+      wildcard: lambda do |node, _segment, index, segments|
+        wildcard_child = node.wildcard_child
+        [wildcard_child, true, { wildcard_child.param_name => segments[index..-1].join('/') }] if wildcard_child
+      end
+    }.freeze
+
+    TRAVERSAL_ORDER = %i[static dynamic wildcard].freeze
+
     # Singleton instances to avoid per-cache strategy allocations.
     #
     # @return [RubyRoutes::LruStrategies::HitStrategy, RubyRoutes::LruStrategies::MissStrategy]
