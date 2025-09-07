@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../constant'
+require_relative 'traversal_strategy'
 
 module RubyRoutes
   class RadixTree
@@ -79,6 +80,7 @@ module RubyRoutes
       end
 
       # Performs traversal through path segments to find a matching route.
+      # Optimized for common cases of 1-3 segments.
       #
       # @param segments [Array<String>] path segments
       # @param state [Hash] traversal state
@@ -86,17 +88,8 @@ module RubyRoutes
       # @param params [Hash] parameters hash
       # @param captured_params [Hash] hash to collect captured parameters
       # @return [nil, Array] nil if traversal succeeds, Array from finalize_on_fail if traversal fails
-      def perform_traversal(segments, state, method, params, captured_params)
-        segments.each_with_index do |segment, index|
-          next_node, stop = traverse_for_segment(state[:current], segment, index, segments, params, captured_params)
-          return finalize_on_fail(state, method, params, captured_params) unless next_node
-
-          state[:current] = next_node
-          state[:matched] = true # Set matched to true if at least one segment matched
-          record_candidate(state, method, params, captured_params) if endpoint_with_method?(state[:current], method)
-          break if stop
-        end
-        nil # Return nil to indicate successful traversal
+      def perform_traversal(segments, state, method, params, captured_params) # rubocop:disable Metrics/AbcSize
+        TraversalStrategy.for(segments.size, self).execute(segments, state, method, params, captured_params)
       end
 
       # Traverses to the next node for a given segment.
@@ -156,17 +149,17 @@ module RubyRoutes
       # @param captured_params [Hash] captured parameters from traversal
       # @return [Array] [handler, params] or [nil, params]
       def finalize_success(state, method, params, captured_params)
-        result = finalize_match(state[:current], method, params, captured_params)
-        return result if result[0]
+        handler, final_params = finalize_match(state[:current], method, params, captured_params)
+        return [handler, final_params] if handler
 
         # Try best candidate if current failed
         if state[:best_node]
           best_params = state[:best_params] || params
           best_captured = state[:best_captured] || captured_params
-          finalize_match(state[:best_node], method, best_params, best_captured)
-        else
-          result
+          handler, final_params = finalize_match(state[:best_node], method, best_params, best_captured)
         end
+
+        [handler, final_params]
       end
 
       # Falls back to the best candidate if no exact match.
