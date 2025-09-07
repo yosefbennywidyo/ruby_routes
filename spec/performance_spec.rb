@@ -74,7 +74,7 @@ RSpec.describe 'Performance Optimizations' do
   describe 'Path Generation Performance' do
     it 'handles high-frequency path generation efficiently' do
       # Use the actual named routes created by resources
-      available_routes = router.route_set.instance_variable_get(:@named_routes).keys
+      available_routes = router.route_set.named_routes.keys
 
       time = Benchmark.realtime do
         1000.times do

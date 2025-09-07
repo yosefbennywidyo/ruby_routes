@@ -236,6 +236,7 @@ RSpec.describe 'Integration Tests' do
         expect(end_time - start_time).to be < 2.0
         # Should have good cache hit rate
         stats = hash_based_router.route_set.cache_stats
+        puts "stats.inspect #{stats.inspect}"
         expect(stats[:hits]).to be > 0
       end
 

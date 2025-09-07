@@ -610,7 +610,7 @@ RSpec.describe RubyRoutes::Route do
 
       # Verify cache was created
       cache = route.instance_variable_get(:@encoding_cache)
-      expect(cache).to be_a(Hash)
+      expect(cache).to be_a(RubyRoutes::Route::SmallLru)
       expect(cache).to include('John Doe' => 'John%20Doe')
 
       # Call again with same value - should use cache
@@ -628,7 +628,7 @@ RSpec.describe RubyRoutes::Route do
       # Use a string that needs encoding (contains space or special chars)
       route.send(:encode_segment_fast, 'test with space')
 
-      expect(route.instance_variable_get(:@encoding_cache)).to be_a(Hash)
+      expect(route.instance_variable_get(:@encoding_cache)).to be_a(RubyRoutes::Route::SmallLru)
     end
   end
 

@@ -191,7 +191,7 @@ RSpec.describe RubyRoutes::RouteSet do
       expect(route_set.size).to eq(2)
       expect(route_set.empty?).to be false
 
-      route_set.clear!
+      route_set.clear_counters!
 
       expect(route_set.size).to eq(0)
       expect(route_set.empty?).to be true
@@ -206,7 +206,7 @@ RSpec.describe RubyRoutes::RouteSet do
     it 'handles clearing empty route set' do
       expect(route_set.empty?).to be true
 
-      expect { route_set.clear! }.not_to raise_error
+      expect { route_set.clear_counters! }.not_to raise_error
 
       expect(route_set.empty?).to be true
       expect(route_set.size).to eq(0)
