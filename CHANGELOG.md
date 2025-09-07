@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.6.0 - 2025-09-08
+
+- **Architecture**: Implemented a flexible strategy pattern for route matching, allowing for hybrid lookups (static hash, dynamic radix tree) to optimize performance.
+- **Performance**: Introduced new traversal strategies (`Unrolled`, `GenericLoop`) to significantly speed up matching for common short path lengths while maintaining efficiency for longer paths.
+- **Refactoring**: Major refactoring across `RouteSet`, `RadixTree`, `Node`, and utility modules to improve code organization, reduce complexity, and enhance maintainability.
+- **Memory Efficiency**: Optimized key-building, path-splitting, and method normalization to reduce object allocations in hot paths. Replaced a manual ring-buffer cache with a more robust `SmallLru` implementation.
+- **Code Quality**: Consolidated constants, improved naming consistency, and streamlined initialization and validation logic across the library for better clarity.
+
+## 2.5.0 - 2025-09-04
+
+- **Performance**: Improved route matching speed and reduced memory usage through optimized data structures.
+- **Bug Fixes**: Addressed issues with nested route parameters and improved error messages for invalid routes.
+
 ## 2.4.0 - 2025-09-04
 
 - **Performance**: Significant optimizations in path caching, HTTP method normalization, and memory allocation reduction
