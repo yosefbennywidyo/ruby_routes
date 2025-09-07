@@ -3,20 +3,22 @@
 require 'spec_helper'
 
 RSpec.describe RubyRoutes::RouteSet::CollectionHelpers do
-  let(:radix_tree) { double('RadixTree', add: nil) }
+  let(:strategy) { double('Strategy', add: nil) }
   let(:dummy_class) do
     Class.new do
       include RubyRoutes::RouteSet::CollectionHelpers
 
-      def initialize(radix_tree)
+      attr_reader :routes, :named_routes
+
+      def initialize(strategy)
         @routes = []
-        @radix_tree = radix_tree
+        @strategy = strategy
         @named_routes = {}
       end
     end
   end
 
-  let(:collection_helper) { dummy_class.new(radix_tree) }
+  let(:collection_helper) { dummy_class.new(strategy) }
   let(:route) { double('Route', path: '/test', methods: [:get], name: 'test_route', named?: true) }
 
   describe 'double insertion bug' do

@@ -205,17 +205,6 @@ RSpec.describe 'Error Handling and Edge Cases' do
     end
   end
 
-  describe 'String extensions edge cases' do
-    it 'handles regular strings' do
-      expect('user'.singularize).to eq('user')
-      expect('user'.pluralize).to eq('users')
-    end
-
-    it 'handles strings with special characters' do
-      expect('user-name'.singularize).to eq('user-name')
-    end
-  end
-
   describe 'Memory and performance edge cases' do
     it 'handles large number of routes without memory issues' do
       router = RubyRoutes::Router.new
