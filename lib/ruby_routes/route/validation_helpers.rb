@@ -53,7 +53,7 @@ module RubyRoutes
           missing, nils = cached_result
         else
           missing, nils = validate_required_params(params)
-      cache_validation_result(params.freeze, [missing, nils])
+          cache_validation_result(params.freeze, [missing, nils])
         end
 
         raise RouteNotFound, "Missing params: #{missing.join(', ')}" unless missing.empty?
@@ -71,10 +71,6 @@ module RubyRoutes
       def validate_required_params(params)
         return RubyRoutes::Constant::EMPTY_PAIR if @required_params.empty?
         params ||= {}
-
-        if (cached = get_cached_validation(params))
-          return cached
-        end
 
         missing = []
         nils = []
@@ -118,14 +114,13 @@ module RubyRoutes
       # @return [void]
       def cache_validation_result(params, result)
         return unless params.frozen?
-        return unless @validation_cache && @validation_cache.size < 64
+        return unless @validation_cache
 
-        @cache_mutex.synchronize { @validation_cache.set(params.hash, result) }
+        @cache_mutex.synchronize do
+          return if @validation_cache.size >= 64
+          @validation_cache.set(params.hash, result)
+        end
       end
-
-      # Fetch cached validation result.
-      #
-      # This method retrieves a cached validation result for the given parameters.
       #
       # @param params [Hash] The parameters used for validation.
       # @return [Object, nil] The cached validation result, or `nil` if not found.
@@ -143,25 +138,6 @@ module RubyRoutes
       def return_hash_to_pool(hash)
         pool = Thread.current[:ruby_routes_hash_pool] ||= []
         pool.push(hash) if pool.size < 5
-      end
-
-      # Validate hash-form constraint rules.
-      #
-      # This method validates a value against a set of hash-form constraints,
-      # such as minimum length, maximum length, format, inclusion, exclusion,
-      # and range.
-      #
-      # @param constraint [Hash] The constraint rules.
-      # @param value [String] The value to validate.
-      # @raise [RubyRoutes::ConstraintViolation] If the value violates any constraint.
-      # @return [void]
-      def validate_hash_constraint!(constraint, value)
-        check_min_length(constraint, value)
-        check_max_length(constraint, value)
-        check_format(constraint, value)
-        check_in_list(constraint, value)
-        check_not_in_list(constraint, value)
-        check_range(constraint, value)
       end
     end
   end

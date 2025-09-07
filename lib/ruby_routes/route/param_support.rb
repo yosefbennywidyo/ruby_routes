@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require_relative 'path_generation'
 require_relative 'warning_helpers'
-require_relative 'constraint_validator'
 require_relative 'query_helpers'
 
 module RubyRoutes
@@ -61,10 +59,10 @@ module RubyRoutes
       def merge_user_params_into(merged_hash, params)
         params.each do |key, value|
           string_key = if key.is_a?(String)
-                         key
-                       else
-                         (Thread.current[:ruby_routes_symbol_keys] ||= {})[key] ||= key.to_s.freeze
-                       end
+                        key
+                      else
+                        (Thread.current[:ruby_routes_symbol_keys] ||= {})[key] ||= key.to_s.freeze
+                      end
           merged_hash[string_key] = value
         end
       end

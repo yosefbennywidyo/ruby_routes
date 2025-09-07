@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require_relative 'warning_helpers'
+require_relative 'validation_helpers'
+require_relative 'param_support'
 
 module RubyRoutes
   class Route
@@ -9,6 +11,8 @@ module RubyRoutes
     # route-related warnings (kept separate to reduce parent module size).
     module PathGeneration
       include RubyRoutes::Route::WarningHelpers
+      include RubyRoutes::Route::ValidationHelpers
+      include RubyRoutes::Route::ParamSupport
 
       private
 
