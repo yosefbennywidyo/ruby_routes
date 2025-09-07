@@ -18,6 +18,7 @@ require_relative 'route/constraint_validator'
 require_relative 'route/check_helpers'
 require_relative 'route/query_helpers'
 require_relative 'route/validation_helpers'
+require_relative 'route/segment_compiler'
 require_relative 'route/path_generation'
 require_relative 'route_set/cache_helpers'
 
@@ -57,6 +58,7 @@ module RubyRoutes
     include RubyRoutes::Route::ValidationHelpers
     include RubyRoutes::Route::QueryHelpers
     include RubyRoutes::Route::PathGeneration
+    include RubyRoutes::Route::SegmentCompiler
     include RubyRoutes::Utility::MethodUtility
     include RubyRoutes::Utility::PathUtility
     include RubyRoutes::Utility::KeyBuilderUtility
@@ -121,130 +123,6 @@ module RubyRoutes
 
     private
 
-    # Compile the segments from the path using Segment objects.
-    #
-    # @return [void]
-    def compile_segments
-      @compiled_segments =
-        if @path == RubyRoutes::Constant::ROOT_PATH
-          RubyRoutes::Constant::EMPTY_ARRAY
-        else
-          @path.split('/').reject(&:empty?)
-               .map { |segment| RubyRoutes::Segment.for(segment) }
-               .freeze
-        end
-    end
-
-    # Compile the required parameters.
-    #
-    # This method identifies dynamic parameters in the path and determines
-    # which parameters are required based on the defaults provided.
-    #
-    # @return [void]
-    def compile_required_params
-      dynamic_param_names   = @compiled_segments.filter_map { |segment| segment.param_name }
-      @param_names          = dynamic_param_names.freeze
-      @required_params      = if @defaults.empty?
-                                dynamic_param_names.freeze
-                              else
-                                dynamic_param_names.reject { |name| @defaults.key?(name) }.freeze
-                              end
-      @required_params_set  = @required_params.to_set.freeze
-    end
-
-    # Check if the path is static.
-    #
-    # This method determines if the path contains only static segments. If so,
-    # it generates the static path.
-    #
-    # @return [void]
-    def check_static_path
-      return unless @compiled_segments.all? { |segment| segment.is_a?(RubyRoutes::Segments::StaticSegment) }
-
-      @static_path = generate_static_path
-    end
-
-    # Generate the static path.
-    #
-    # This method constructs the static path from the compiled segments.
-    #
-    # @return [String] The generated static path.
-    def generate_static_path
-      return RubyRoutes::Constant::ROOT_PATH if @compiled_segments.empty?
-
-      "/#{@compiled_segments.map { |segment| segment.instance_variable_get(:@literal_text) }.join('/')}"
-    end
-
-    # Extract path parameters fast using Segment objects.
-    #
-    # This method extracts parameters from a request path based on the compiled
-    # segments.
-    #
-    # @param request_path [String] The request path.
-    # @return [Hash, nil] The extracted parameters, or `nil` if extraction fails.
-    def extract_path_params_fast(request_path)
-      return RubyRoutes::Constant::EMPTY_HASH if root_path_and_empty_segments?(request_path)
-
-      return nil if @compiled_segments.empty?
-
-      path_parts = split_path(request_path)
-      return nil unless valid_parts_count?(path_parts)
-
-      extract_params_from_parts(path_parts)
-    end
-
-    # Check if it's a root path with empty segments.
-    #
-    # @param request_path [String] The request path.
-    # @return [Boolean]
-    def root_path_and_empty_segments?(request_path)
-      @compiled_segments.empty? && request_path == RubyRoutes::Constant::ROOT_PATH
-    end
-
-    # Validate the parts count.
-    #
-    # @param path_parts [Array<String>] The path parts.
-    # @return [Boolean]
-    def valid_parts_count?(path_parts)
-      has_wildcard = @compiled_segments.any? { |segment| segment.wildcard? }
-      (!has_wildcard && path_parts.size == @compiled_segments.size) ||
-        (has_wildcard && path_parts.size >= (@compiled_segments.size - 1))
-    end
-
-    # Extract parameters from parts.
-    #
-    # @param path_parts [Array<String>] The path parts.
-    # @return [Hash, nil]
-    def extract_params_from_parts(path_parts)
-      params_hash = {}
-      @compiled_segments.each_with_index do |segment, index|
-        result = process_segment(segment, index, path_parts, params_hash)
-        return nil if result == false
-        break if result == :break
-      end
-      params_hash
-    end
-
-    # Process a segment.
-    #
-    # @param segment [RubyRoutes::Segments::BaseSegment] The segment object.
-    # @param index [Integer] The index of the segment.
-    # @param path_parts [Array<String>] The path parts.
-    # @param params_hash [Hash] The parameters hash.
-    # @return [Boolean, Symbol]
-    def process_segment(segment, index, path_parts, params_hash)
-      case segment
-      when RubyRoutes::Segments::StaticSegment
-        segment.instance_variable_get(:@literal_text) == path_parts[index]
-      when RubyRoutes::Segments::DynamicSegment
-        params_hash[segment.param_name] = path_parts[index]
-        true
-      when RubyRoutes::Segments::WildcardSegment
-        params_hash[segment.param_name] = path_parts[index..].join('/')
-        :break
-      end
-    end
-
     # Split path into parts.
     #
     # @param path [String] The path to split.
@@ -276,6 +154,5 @@ module RubyRoutes
       compile_required_params
       check_static_path
     end
-
   end
 end

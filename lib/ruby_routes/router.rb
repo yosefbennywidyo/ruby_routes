@@ -102,11 +102,7 @@ module RubyRoutes
       return self if @frozen
 
       @frozen = true
-      if @route_set.respond_to?(:finalize!)
-        @route_set.finalize!
-      else
-        @route_set.freeze
-      end
+      @route_set.freeze
       @scope_stack.freeze
       @concerns.freeze
       self

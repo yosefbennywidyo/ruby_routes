@@ -28,8 +28,8 @@ module RubyRoutes
 
     def initialize
       @root = Node.new
-      @split_cache = RubyRoutes::Route::SmallLru.new(2048)
-      @split_cache_max = 2048      # larger cache for better hit rates
+      @split_cache = RubyRoutes::Route::SmallLru.new(RubyRoutes::Constant::CACHE_SIZE)
+      @split_cache_max = RubyRoutes::Constant::CACHE_SIZE      # larger cache for better hit rates
       @empty_segments = [].freeze  # reuse for root path
     end
 

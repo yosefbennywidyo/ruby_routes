@@ -1,5 +1,11 @@
 # frozen_string_literal: true
 
+require_relative 'segments/base_segment'
+require_relative 'segments/dynamic_segment'
+require_relative 'segments/static_segment'
+require_relative 'segments/wildcard_segment'
+require_relative 'constant'
+
 module RubyRoutes
   # Segment
   #
@@ -25,16 +31,6 @@ module RubyRoutes
     #   Segment.for("*files") # => WildcardSegment
     #   Segment.for("users")  # => StaticSegment
     def self.for(segment_token)
-      # Lazy-load dependencies on first use
-      @_dependencies_loaded ||= begin
-        require_relative 'segments/base_segment'
-        require_relative 'segments/dynamic_segment'
-        require_relative 'segments/static_segment'
-        require_relative 'segments/wildcard_segment'
-        require_relative 'constant'
-        true
-      end
-
       segment_text  = segment_token.to_s
       segment_key   = segment_text.empty? ? :default : segment_text.getbyte(0)
       segment_class = RubyRoutes::Constant::SEGMENTS[segment_key] || RubyRoutes::Constant::SEGMENTS[:default]

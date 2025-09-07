@@ -53,13 +53,14 @@ module RubyRoutes
     # @return [Hash, nil] A hash containing the matched route and parameters, or `nil` if no match is found.
     def match(http_method, path)
       normalized_method = normalize_http_method(http_method)
-      lookup_key = cache_key_for_request(normalized_method, path.to_s)
+      raw_path = path.to_s
+      lookup_key = cache_key_for_request(normalized_method, raw_path)
 
       if (cached_result = fetch_cached_recognition(lookup_key))
         return cached_result
       end
 
-      result = perform_match(normalized_method, path.to_s)
+      result = perform_match(normalized_method, raw_path)
       insert_cache_entry(lookup_key, result) if result
       result
     end
@@ -91,6 +92,10 @@ module RubyRoutes
       route.generate_path(params)
     end
 
+    def clear_counters!
+      clear_routes_and_caches!
+    end
+
     private
 
     # Set up the matching strategy.
@@ -108,8 +113,7 @@ module RubyRoutes
     # @param raw_path [String] The raw request path.
     # @return [Hash, nil] A hash containing the matched route and parameters, or `nil` if no match is found.
     def perform_match(normalized_method, raw_path)
-      path_without_query = raw_path.split('?', 2).first
-      matched_route, path_params = @strategy.find(path_without_query, normalized_method)
+      matched_route, path_params = @strategy.find(raw_path, normalized_method)
       return nil unless matched_route
 
       final_params = build_final_params(matched_route, path_params, raw_path)
@@ -123,16 +127,12 @@ module RubyRoutes
     # @param raw_path [String] The full request path including query string.
     # @return [Hash] The final, merged parameters hash.
     def build_final_params(matched_route, path_params, raw_path)
-      # Start with a mutable copy of path_params or a new hash.
-      final_params = path_params&.frozen? ? path_params.dup : (path_params || {})
-
-      # Merge query parameters if any exist.
+      # Optimized merge order: defaults -> path -> query
+      # Start with defaults, which have the lowest precedence.
+      final_params = matched_route.defaults.dup
+      # Merge path parameters, which override defaults.
+      final_params.merge!(path_params) if path_params
       matched_route.merge_query_params_into_hash(final_params, raw_path, nil)
-
-      # Merge default parameters, which have the lowest precedence.
-      if matched_route.respond_to?(:defaults) && (defaults = matched_route.defaults)
-        defaults.each { |key, value| final_params[key] = value unless final_params.key?(key) }
-      end
 
       final_params
     end
