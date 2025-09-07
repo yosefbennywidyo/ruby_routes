@@ -122,9 +122,7 @@ module RubyRoutes
     # recently used entries will be evicted.
     #
     # @return [Integer]
-    QUERY_CACHE_SIZE = 2048
-
-    METHOD_CACHE_MAX_SIZE = 1000
+    CACHE_SIZE = 2048
 
     # HTTP method constants.
     HTTP_GET     = 'GET'
