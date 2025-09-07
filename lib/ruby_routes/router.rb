@@ -107,7 +107,6 @@ module RubyRoutes
       else
         @route_set.freeze
       end
-      @route_utils.freeze if @route_utils.respond_to?(:freeze)
       @scope_stack.freeze
       @concerns.freeze
       self
