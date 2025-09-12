@@ -16,17 +16,17 @@ module RubyRoutes
 
       def add(route)
         route.methods.each do |method|
-          key = "#{method.upcase}::#{route.path&.downcase}"
+          key = "#{method}::#{route.path}"
           @routes[key] = route
         end
       end
 
       def find(path, http_method)
-        key = "#{http_method.upcase}::#{path&.downcase}"
+        key = "#{http_method}::#{path}"
         route = @routes[key]
         return nil unless route
 
-        [route, {}]
+        [route, RubyRoutes::Constant::EMPTY_HASH]
       end
     end
   end

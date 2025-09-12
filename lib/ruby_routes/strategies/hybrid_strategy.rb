@@ -41,10 +41,8 @@ module RubyRoutes
       # @param method [String] The HTTP method
       # @return [Array<Route, Hash>, nil] [route, params] or nil if not found
       def find(path, method)
-        # Try static routes first (fastest path)
-        if @static_routes.key?(path) && @static_routes[path].key?(method)
-          route = @static_routes[path][method]
-          return [route, {}]
+        if (by_path = @static_routes[path]) && (route = by_path[method.to_s.upcase])
+          return [route, RubyRoutes::Constant::EMPTY_HASH]
         end
 
         # Fall back to dynamic routes
