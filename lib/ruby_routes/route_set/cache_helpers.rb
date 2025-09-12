@@ -53,12 +53,15 @@ module RubyRoutes
       # @param lookup_key [String] The cache lookup key.
       # @return [Hash, nil] The cached recognition entry, or `nil` if not found.
       def fetch_cached_recognition(lookup_key)
-        if (cached_result = @recognition_cache[lookup_key])
-          @small_lru.increment_hits
-          return cached_result
+        @cache_mutex.synchronize do
+          if (cached_result = @recognition_cache[lookup_key])
+            @small_lru.increment_hits
+            return cached_result
+          end
+
+          @small_lru.increment_misses
+          nil
         end
-        @small_lru.increment_misses
-        nil
       end
 
       # Cache insertion with simple segment eviction (25% oldest).

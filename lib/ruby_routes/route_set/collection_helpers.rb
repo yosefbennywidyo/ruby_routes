@@ -78,7 +78,11 @@ module RubyRoutes
           @routes.clear
           @named_routes.clear
           @recognition_cache.clear
-          @small_lru.clear_counters!
+          if @small_lru.respond_to?(:clear!)
+            @small_lru.clear!
+          else
+            @small_lru.clear_counters!
+          end
           @strategy = @strategy_class.new
           RubyRoutes::Utility::KeyBuilderUtility.clear!
         end
