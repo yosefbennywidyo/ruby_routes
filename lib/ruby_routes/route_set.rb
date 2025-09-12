@@ -133,6 +133,8 @@ module RubyRoutes
       # Merge path parameters, which override defaults.
       final_params.merge!(path_params) if path_params
       matched_route.merge_query_params_into_hash(final_params, raw_path, nil)
+      # Enforce constraints on full parameter set (path + query + defaults).
+      matched_route.validate_constraints_fast!(final_params.dup) unless matched_route.constraints.empty?
 
       final_params
     end

@@ -18,10 +18,7 @@ module RubyRoutes
     # - Cache (`METHOD_CACHE`) for uncommon verbs or dynamic inputs.
     #
     # Thread Safety:
-    # - `METHOD_CACHE` is a shared `Hash`; occasional benign race
-    #   (double compute of the same key) is acceptable. If strict
-    #   thread safety is required, wrap in a `Mutex` (not done to
-    #   preserve performance).
+    # - `METHOD_CACHE` uses `SmallLru` for LRU eviction.
     #
     # @api internal
     module MethodUtility
@@ -74,7 +71,7 @@ module RubyRoutes
 
         # Use SmallLru for LRU eviction, freeze key to prevent mutation
         key = input_string.dup.freeze
-        METHOD_CACHE.get(key) || METHOD_CACHE.set(key, ascii_upcase(input_string.dup).freeze)
+        METHOD_CACHE.get(key) || METHOD_CACHE.set(key, ascii_upcase(input_string).freeze)
       end
 
       # Normalize a `String` HTTP method.
