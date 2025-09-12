@@ -113,9 +113,10 @@ module RubyRoutes
 
         nested_name = options[:nested].to_s
         nested_path = RubyRoutes::Utility::InflectorUtility.pluralize(nested_name)
+        nested_param = ":#{RubyRoutes::Utility::InflectorUtility.singularize(nested_name)}_id"
         push_scope(path: '/:id') do
           push_scope(path: "/#{nested_path}") do
-            define_resource_actions(opts, nested_path, member_param: ':nested_id')
+            define_resource_actions(opts, nested_path, member_param: nested_param)
           end
         end
       end
