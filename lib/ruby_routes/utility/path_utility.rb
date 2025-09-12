@@ -35,6 +35,7 @@ module RubyRoutes
         return '/' if raw_path.nil? || raw_path.empty?
 
         path = raw_path.start_with?('/') ? raw_path : "/#{raw_path}"
+        path = path.squeeze('/')
         path = path.chomp('/') unless path == '/'
         path
       end
