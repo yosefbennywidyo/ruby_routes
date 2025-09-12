@@ -6,7 +6,11 @@ require_relative '../../lib/ruby_routes/radix_tree'
 require_relative '../../lib/ruby_routes/utility/path_utility'
 
 RSpec.describe RubyRoutes::Utility::PathUtility do
-  let(:path_utility) { RubyRoutes::RadixTree.new }
+  let(:path_utility) do
+    Class.new do
+      include RubyRoutes::Utility::PathUtility
+    end.new
+  end
 
   describe '#split_path' do
     it 'splits path on "/" and rejects empty segments' do
@@ -62,8 +66,8 @@ RSpec.describe RubyRoutes::Utility::PathUtility do
     end
 
     it 'handles paths with multiple trailing slashes' do
-      expect(path_utility.normalize_path('users//')).to eq('/users/')
-      # Note: The method only removes one trailing slash; if multiple, it may leave one
+      expect(path_utility.normalize_path('users//')).to eq('/users')
+      expect(path_utility.normalize_path('users//123')).to eq('/users/123')
     end
 
     it 'handles root path' do

@@ -3,6 +3,12 @@
 require 'spec_helper'
 
 RSpec.describe 'Integration Tests' do
+  def skip_if_hash_based_strategy(router, message = 'HashBasedStrategy does not support dynamic routes')
+    if router.route_set.instance_variable_get(:@strategy).is_a?(RubyRoutes::Strategies::HashBasedStrategy)
+      skip message
+    end
+  end
+
   describe 'Full routing workflow' do
     let(:hash_based_router) do
       RubyRoutes::Router.new do
@@ -47,9 +53,8 @@ RSpec.describe 'Integration Tests' do
       end
 
       it 'matches RESTful resource routes' do
-        if hash_based_router.route_set.instance_variable_get(:@strategy).is_a?(RubyRoutes::Strategies::HashBasedStrategy)
-          skip 'HashBasedStrategy does not support dynamic routes'
-        end
+        skip_if_hash_based_strategy(hash_based_router)
+
         # Index
         result = hash_based_router.route_set.match('GET', '/users')
         expect(result[:controller]).to eq('users')
@@ -80,9 +85,8 @@ RSpec.describe 'Integration Tests' do
       end
 
       it 'matches nested resource routes' do
-        if hash_based_router.route_set.instance_variable_get(:@strategy).is_a?(RubyRoutes::Strategies::HashBasedStrategy)
-          skip 'HashBasedStrategy does not support dynamic routes'
-        end
+        skip_if_hash_based_strategy(hash_based_router)
+
         # Nested posts
         result = hash_based_router.route_set.match('GET', '/users/123/posts')
         expect(result[:controller]).to eq('posts')
@@ -99,9 +103,8 @@ RSpec.describe 'Integration Tests' do
       end
 
       it 'matches namespaced routes' do
-        if hash_based_router.route_set.instance_variable_get(:@strategy).is_a?(RubyRoutes::Strategies::HashBasedStrategy)
-          skip 'HashBasedStrategy does not support dynamic routes'
-        end
+        skip_if_hash_based_strategy(hash_based_router)
+
         result = hash_based_router.route_set.match('GET', '/api/v1/users')
         expect(result[:controller]).to eq('api/v1/users')
         expect(result[:action]).to eq('index')
@@ -117,9 +120,8 @@ RSpec.describe 'Integration Tests' do
       end
 
       it 'respects route constraints' do
-        if hash_based_router.route_set.instance_variable_get(:@strategy).is_a?(RubyRoutes::Strategies::HashBasedStrategy)
-          skip 'HashBasedStrategy does not support dynamic routes'
-        end
+        skip_if_hash_based_strategy(hash_based_router)
+
         # Should match numeric ID
         result = hash_based_router.route_set.match('GET', '/items/123')
         expect(result).not_to be_nil
@@ -132,9 +134,8 @@ RSpec.describe 'Integration Tests' do
       end
 
       it 'matches concern routes' do
-        if hash_based_router.route_set.instance_variable_get(:@strategy).is_a?(RubyRoutes::Strategies::HashBasedStrategy)
-          skip 'HashBasedStrategy does not support dynamic routes'
-        end
+        skip_if_hash_based_strategy(hash_based_router)
+
         # Comments on articles via concern
         result = hash_based_router.route_set.match('GET', '/articles/123/comments')
         expect(result[:controller]).to eq('comments')
@@ -162,9 +163,8 @@ RSpec.describe 'Integration Tests' do
 
     describe 'path generation' do
       it 'generates paths for named routes' do
-        if hash_based_router.route_set.instance_variable_get(:@strategy).is_a?(RubyRoutes::Strategies::HashBasedStrategy)
-          skip 'HashBasedStrategy does not support dynamic routes'
-        end
+        skip_if_hash_based_strategy(hash_based_router)
+
         # Simple named route
         path = hash_based_router.route_set.generate_path(:search)
         expect(path).to eq('/search')
@@ -179,9 +179,8 @@ RSpec.describe 'Integration Tests' do
       end
 
       it 'generates paths for RESTful routes' do
-        if hash_based_router.route_set.instance_variable_get(:@strategy).is_a?(RubyRoutes::Strategies::HashBasedStrategy)
-          skip 'HashBasedStrategy does not support dynamic routes'
-        end
+        skip_if_hash_based_strategy(hash_based_router)
+
         routes = hash_based_router.route_set.routes
 
         # Test user show route
@@ -206,9 +205,8 @@ RSpec.describe 'Integration Tests' do
 
     describe 'performance with realistic load' do
       it 'handles many route matches efficiently' do
-        if hash_based_router.route_set.instance_variable_get(:@strategy).is_a?(RubyRoutes::Strategies::HashBasedStrategy)
-          skip 'HashBasedStrategy does not support dynamic routes'
-        end
+        skip_if_hash_based_strategy(hash_based_router)
+
         paths = [
           '/',
           '/users',
@@ -240,9 +238,8 @@ RSpec.describe 'Integration Tests' do
       end
 
       it 'handles cache eviction gracefully' do
-        if hash_based_router.route_set.instance_variable_get(:@strategy).is_a?(RubyRoutes::Strategies::HashBasedStrategy)
-          skip 'HashBasedStrategy does not support dynamic routes'
-        end
+        skip_if_hash_based_strategy(hash_based_router)
+
         # Generate many unique paths to trigger cache eviction
         1000.times do |i|
           hash_based_router.route_set.match('GET', "/users/#{i}")
@@ -257,9 +254,8 @@ RSpec.describe 'Integration Tests' do
 
     describe 'complex routing scenarios' do
       it 'handles overlapping route patterns' do
-        if hash_based_router.route_set.instance_variable_get(:@strategy).is_a?(RubyRoutes::Strategies::HashBasedStrategy)
-          skip 'HashBasedStrategy does not support dynamic routes'
-        end
+        skip_if_hash_based_strategy(hash_based_router)
+
         complex_hash_based_router = RubyRoutes::Router.new do
           get '/users/new', to: 'users#new'
           get '/users/:id', to: 'users#show'
@@ -280,9 +276,8 @@ RSpec.describe 'Integration Tests' do
       end
 
       it 'handles wildcard routes' do
-        if hash_based_router.route_set.instance_variable_get(:@strategy).is_a?(RubyRoutes::Strategies::HashBasedStrategy)
-          skip 'HashBasedStrategy does not support dynamic routes'
-        end
+        skip_if_hash_based_strategy(hash_based_router)
+
         wildcard_hash_based_router = RubyRoutes::Router.new do
           get '/files/*path', to: 'files#show'
           get '/assets/*path', to: 'assets#show'
