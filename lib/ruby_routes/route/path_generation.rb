@@ -30,9 +30,12 @@ module RubyRoutes
         return @static_path || RubyRoutes::Constant::ROOT_PATH if trivial_route?
 
         merged_params = build_merged_params(params)
-        validate_required_once(merged_params.dup)
-
-        build_or_fetch_generated_path(merged_params)
+        begin
+          validate_required_once(merged_params.dup.freeze)
+          build_or_fetch_generated_path(merged_params)
+        ensure
+          return_hash_to_pool(merged_params)
+        end
       end
 
       # Build or fetch a generated path from the cache.

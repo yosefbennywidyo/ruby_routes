@@ -117,7 +117,6 @@ module RubyRoutes
         return unless @validation_cache
 
         @cache_mutex.synchronize do
-          return if @validation_cache.size >= 64
           @validation_cache.set(params.hash, result)
         end
       end

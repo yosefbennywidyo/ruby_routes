@@ -3,6 +3,7 @@
 require 'timeout'
 require_relative '../constant'
 require_relative 'warning_helpers'
+require_relative 'check_helpers'
 
 module RubyRoutes
   class Route
@@ -14,6 +15,7 @@ module RubyRoutes
     # for constraint violations.
     module ConstraintValidator
       include RubyRoutes::Route::WarningHelpers
+      include RubyRoutes::Route::CheckHelpers
       # Validate all constraints for the given parameters.
       #
       # This method iterates through all constraints and validates each parameter

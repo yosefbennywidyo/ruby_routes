@@ -20,7 +20,7 @@ module RubyRoutes
       # @raise [RubyRoutes::ConstraintViolation] If the value is shorter than the minimum length.
       # @return [void]
       def check_min_length(constraint, value)
-        return unless (min = constraint[:min_length]) && value&.length < min
+        return unless (min = constraint[:min_length]) && "#{value}".length < min
 
         raise RubyRoutes::ConstraintViolation, "Value too short (minimum #{constraint[:min_length]} characters)"
       end
@@ -36,7 +36,7 @@ module RubyRoutes
       # @raise [RubyRoutes::ConstraintViolation] If the value exceeds the maximum length.
       # @return [void]
       def check_max_length(constraint, value)
-        return unless (max = constraint[:max_length]) && value&.length > max
+        return unless (max = constraint[:max_length]) && "#{value}".length > max
 
         raise RubyRoutes::ConstraintViolation, "Value too long (maximum #{constraint[:max_length]} characters)"
       end
