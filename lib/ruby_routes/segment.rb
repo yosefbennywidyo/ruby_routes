@@ -23,15 +23,15 @@ module RubyRoutes
   class Segment
     # Build an appropriate segment instance for the provided token.
     #
-    # @param text [String, Symbol, #to_s] raw segment token
+    # @param segment_token [String, Symbol, #to_s] raw segment token
     # @return [RubyRoutes::Segments::BaseSegment]
     #
     # @example
     #   Segment.for(":id")    # => DynamicSegment
     #   Segment.for("*files") # => WildcardSegment
     #   Segment.for("users")  # => StaticSegment
-    def self.for(text)
-      segment_text  = text.to_s
+    def self.for(segment_token)
+      segment_text  = segment_token.to_s
       segment_key   = segment_text.empty? ? :default : segment_text.getbyte(0)
       segment_class = RubyRoutes::Constant::SEGMENTS[segment_key] || RubyRoutes::Constant::SEGMENTS[:default]
       segment_class.new(segment_text)

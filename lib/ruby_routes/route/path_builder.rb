@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative 'small_lru'
+
 module RubyRoutes
   class Route
     # PathBuilder: generation + segment encoding
@@ -25,7 +27,7 @@ module RubyRoutes
       # Append a segment to the buffer.
       #
       # @param buffer [String] the buffer to append to
-      # @param segment [Hash] the segment to append
+      # @param segment [RubyRoutes::Segments::BaseSegment] the segment to append
       # @param merged [Hash] the merged parameters
       # @param index [Integer] the current index
       # @param last_index [Integer] the last index
@@ -48,8 +50,8 @@ module RubyRoutes
         # Rough heuristic (static sizes + average dynamic)
         base = 1
         @compiled_segments.each do |segment|
-          base += case segment[:type]
-                  when :static then segment[:value].length + 1
+          base += case segment
+                  when RubyRoutes::Segments::StaticSegment then segment.literal_text.length + 1
                   else 20
                   end
         end
@@ -75,9 +77,12 @@ module RubyRoutes
       def encode_segment_fast(string)
         return string if RubyRoutes::Constant::UNRESERVED_RE.match?(string)
 
-        @encoding_cache ||= {}
-        # Use gsub instead of tr for proper replacement of + with %20
-        @encoding_cache[string] ||= URI.encode_www_form_component(string).gsub('+', '%20')
+        @encoding_cache ||= RubyRoutes::Route::SmallLru.new(256)
+        cached = @encoding_cache.get(string)
+        return cached if cached
+
+        encoded = URI.encode_www_form_component(string).gsub('+', '%20')
+        @encoding_cache.set(string, encoded)
       end
     end
   end

@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require_relative 'warning_helpers'
+require_relative 'validation_helpers'
+require_relative 'param_support'
 
 module RubyRoutes
   class Route
@@ -9,6 +11,8 @@ module RubyRoutes
     # route-related warnings (kept separate to reduce parent module size).
     module PathGeneration
       include RubyRoutes::Route::WarningHelpers
+      include RubyRoutes::Route::ValidationHelpers
+      include RubyRoutes::Route::ParamSupport
 
       private
 
@@ -25,8 +29,8 @@ module RubyRoutes
         return @static_path if static_short_circuit?(params)
         return @static_path || RubyRoutes::Constant::ROOT_PATH if trivial_route?
 
-        validate_required_once(params)
         merged_params = build_merged_params(params)
+        validate_required_once(merged_params.dup)
 
         build_or_fetch_generated_path(merged_params)
       end

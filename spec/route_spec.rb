@@ -610,7 +610,7 @@ RSpec.describe RubyRoutes::Route do
 
       # Verify cache was created
       cache = route.instance_variable_get(:@encoding_cache)
-      expect(cache).to be_a(Hash)
+      expect(cache).to be_a(RubyRoutes::Route::SmallLru)
       expect(cache).to include('John Doe' => 'John%20Doe')
 
       # Call again with same value - should use cache
@@ -628,7 +628,7 @@ RSpec.describe RubyRoutes::Route do
       # Use a string that needs encoding (contains space or special chars)
       route.send(:encode_segment_fast, 'test with space')
 
-      expect(route.instance_variable_get(:@encoding_cache)).to be_a(Hash)
+      expect(route.instance_variable_get(:@encoding_cache)).to be_a(RubyRoutes::Route::SmallLru)
     end
   end
 
@@ -757,7 +757,6 @@ RSpec.describe RubyRoutes::Route do
       it "doesn't cache validation results for non-frozen params" do
         # Create a non-frozen params hash
         params = { id: '123' }
-        result = double('validation_result')
 
         # Verify it wasn't cached
         cached_result = route.send(:get_cached_validation, params)

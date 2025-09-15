@@ -6,18 +6,21 @@ require 'rack'
 require 'set'
 require_relative 'constant'
 require_relative 'node'
+require_relative 'cache_setup'
+require_relative 'route_set/cache_helpers'
 require_relative 'route/small_lru'
 require_relative 'utility/key_builder_utility'
 require_relative 'utility/method_utility'
 require_relative 'utility/path_utility'
 require_relative 'utility/route_utility'
 require_relative 'route/param_support'
-require_relative 'route/segment_compiler'
+require_relative 'segment'
 require_relative 'route/path_builder'
 require_relative 'route/constraint_validator'
 require_relative 'route/check_helpers'
 require_relative 'route/query_helpers'
 require_relative 'route/validation_helpers'
+require_relative 'route/segment_compiler'
 require_relative 'route/path_generation'
 
 module RubyRoutes
@@ -51,42 +54,43 @@ module RubyRoutes
   # @api public
   class Route
     include ParamSupport
-    include SegmentCompiler
     include PathBuilder
     include RubyRoutes::Route::ConstraintValidator
     include RubyRoutes::Route::ValidationHelpers
     include RubyRoutes::Route::QueryHelpers
     include RubyRoutes::Route::PathGeneration
+    include RubyRoutes::Route::SegmentCompiler
     include RubyRoutes::Utility::MethodUtility
     include RubyRoutes::Utility::PathUtility
     include RubyRoutes::Utility::KeyBuilderUtility
+    include RubyRoutes::RouteSet::CacheHelpers
+    include RubyRoutes::CacheSetup
 
     attr_reader :path, :methods, :controller, :action, :name, :constraints, :defaults
 
-    public :extract_params, :parse_query_params, :query_params, :generate_path
+    public :extract_params, :parse_query_params, :query_params, :generate_path, :merge_query_params_into_hash
 
     # Create a new Route.
     #
     # @param path [String] The raw route path (may include `:params` or `*splat`).
     # @param options [Hash] The options for the route.
     # @option options [Symbol, String, Array<Symbol, String>] :via (:get) HTTP method(s).
-    # @option options [String] :to ("controller#action") The controller and action.
-    # @option options [String] :controller Explicit controller (overrides `:to`).
-    # @option options [String, Symbol] :action Explicit action (overrides part after `#`).
-    # @option options [Hash] :constraints Parameter constraints (Regexp / Symbol / Hash).
-    # @option options [Hash] :defaults Default parameter values.
-    # @option options [Symbol, String] :as The route name.
+    # @option options [String] :to The controller#action string.
+    # @option options [String] :controller The controller name.
+    # @option options [String] :action The action name.
+    # @option options [String] :as The route name.
+    # @option options [Hash] :constraints The route constraints.
+    # @option options [Hash] :defaults The route defaults.
     def initialize(path, options = {})
+      @options = options
       @path = normalize_path(path)
-
-      setup_methods(options)
-      setup_controller_and_action(options)
-
-      @name = options[:as]
-      @constraints = (options[:constraints] || {}).freeze
-      @defaults = (options[:defaults] || {}).transform_keys(&:to_s).freeze
+      @name = @options[:as]
+      @constraints = (@options[:constraints] || {}).freeze
+      @defaults = (@options[:defaults] || {}).transform_keys(&:to_s).freeze
       @param_key_slots = [[nil, nil], [nil, nil]]
       @required_validated_once = false
+
+      setup_caches
 
       precompile_route_data
       validate_route!
@@ -121,56 +125,25 @@ module RubyRoutes
 
     private
 
-    # Set up HTTP methods from options.
-    #
-    # @param options [Hash] The options for the route.
-    # @return [void]
-    def setup_methods(options)
-      raw_http_methods = Array(options[:via] || :get)
-      @methods = raw_http_methods.map { |method| normalize_http_method(method) }.freeze
-      @methods_set = @methods.to_set.freeze
-    end
-
-    # Set up controller and action from options.
-    #
-    # @param options [Hash] The options for the route.
-    # @return [void]
-    def setup_controller_and_action(options)
-      @controller = extract_controller(options)
-      @action = options[:action] || extract_action(options[:to])
-    end
-
-    # Infer controller name from options or `:to`.
-    #
-    # @param options [Hash] The options for the route.
-    # @return [String, nil] The inferred controller name.
-    def extract_controller(options)
-      return options[:controller] if options[:controller]
-      to = options[:to]
-      return nil unless to
-
-      to.to_s.split('#', 2).first
-    end
-
-    # Infer action from `:to` string.
-    #
-    # @param to [String, nil] The `:to` string.
-    # @return [String, nil] The inferred action name.
-    def extract_action(to)
-      return nil unless to
-
-      to.to_s.split('#', 2).last
-    end
+    # Expose for testing / external callers.
+    public :extract_path_params_fast
 
     # Precompile route data for performance.
     #
     # @return [void]
     def precompile_route_data
+      raw_http_methods = Array(@options[:via] || :get)
+      @methods = raw_http_methods.map { |method| normalize_http_method(method) }.freeze
+      @methods_set = @methods.to_set.freeze
+
+      to_str = @options[:to].to_s
+      to_controller, to_action = to_str.split('#', 2)
+      @controller = @options[:controller] || to_controller
+      @action = @options[:action] || to_action
+
       @is_resource = @path.match?(%r{/:id(?:$|\.)})
-      @gen_cache = SmallLru.new(512)
-      @query_cache = SmallLru.new(RubyRoutes::Constant::QUERY_CACHE_SIZE)
-      @cache_mutex = Mutex.new  # Thread-safe access to caches
-      initialize_validation_cache
+
+      setup_caches
       compile_segments
       compile_required_params
       check_static_path

@@ -21,6 +21,14 @@ module RubyRoutes
       # @param raw_segment_text [String, Symbol, nil]
       def initialize(raw_segment_text = nil)
         @raw_text = raw_segment_text.to_s if raw_segment_text
+        @param_name = nil
+      end
+
+      # Get the parameter name for this segment (if any).
+      #
+      # @return [String, nil]
+      def param_name
+        @param_name
       end
 
       # Indicates whether this segment is a wildcard (greedy) segment.

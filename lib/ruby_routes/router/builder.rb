@@ -32,6 +32,18 @@ module RubyRoutes
     class Builder
       include RubyRoutes::Router::BuildHelpers
 
+      # Initialize the Builder.
+      #
+      # This method initializes the `@recorded_calls` array and optionally
+      # evaluates the provided block in the context of the Builder instance.
+      #
+      # @yield [definition_block] Runs the routing DSL in a recording context (optional).
+      # @return [void]
+      def initialize(&definition_block)
+        @recorded_calls = []
+        instance_eval(&definition_block) if definition_block
+      end
+
       # Array of recorded calls: [method_symbol, args_array, block].
       #
       # Each tuple contains:
@@ -46,18 +58,6 @@ module RubyRoutes
         @recorded_calls
           .map { |(method_name, args, block)| [method_name, args.dup.freeze, block] }
           .freeze
-      end
-
-      # Initialize the Builder.
-      #
-      # This method initializes the `@recorded_calls` array and optionally
-      # evaluates the provided block in the context of the Builder instance.
-      #
-      # @yield [definition_block] Runs the routing DSL in a recording context (optional).
-      # @return [void]
-      def initialize(&definition_block)
-        @recorded_calls = []
-        instance_eval(&definition_block) if definition_block
       end
 
       # ---- DSL Recording -------------------------------------------------

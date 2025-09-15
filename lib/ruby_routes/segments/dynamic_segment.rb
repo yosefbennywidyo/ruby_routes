@@ -35,7 +35,7 @@ module RubyRoutes
       def ensure_child(parent_node)
         parent_node.dynamic_child ||= Node.new
         dynamic_child_node = parent_node.dynamic_child
-        dynamic_child_node.param_name = @param_name
+        dynamic_child_node.param_name ||= @param_name
         dynamic_child_node
       end
 

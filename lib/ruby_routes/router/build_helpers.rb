@@ -17,12 +17,6 @@ module RubyRoutes
       def build
         router = Router.new
         validate_calls(@recorded_calls)
-        RubyRoutes::Constant::RECORDED_METHODS.each do |method_name|
-          define_method(method_name) do |*arguments, &definition_block|
-            @recorded_calls << [__method__, arguments, definition_block]
-            nil
-          end
-        end
         router.finalize!
         router
       end
@@ -95,7 +89,7 @@ module RubyRoutes
       def validate_calls(recorded_calls)
         allowed_router_methods = RubyRoutes::Constant::RECORDED_METHODS
         recorded_calls.each do |(router_method, _arguments, _definition_block)|
-          unless router_method.is_a?(Symbol) && allowed_router_methods.include?(router_method)
+          unless allowed_router_methods.include?(router_method)
             raise ArgumentError, "Invalid router method: #{router_method.inspect}"
           end
         end

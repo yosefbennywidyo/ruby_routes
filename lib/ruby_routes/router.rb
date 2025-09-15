@@ -6,6 +6,7 @@ require_relative 'router/http_helpers'
 require_relative 'router/resource_helpers'
 require_relative 'constant'
 require_relative 'route_set'
+
 module RubyRoutes
   # RubyRoutes::Router
   #
@@ -64,13 +65,26 @@ module RubyRoutes
 
     # Initialize the router.
     #
+    # @param strategy [Class] The matching strategy to use.
     # @param definition_block [Proc] The block to define routes.
-    def initialize(&definition_block)
-      @route_set   = RouteSet.new
+    def initialize(strategy: Strategies::HybridStrategy, &definition_block)
+      @route_set   = RouteSet.new(strategy: strategy)
       @route_utils = RubyRoutes::Utility::RouteUtility.new(@route_set)
       @scope_stack = []
       @concerns    = {}
+      @frozen      = false
       instance_eval(&definition_block) if definition_block
+    end
+
+    # Add a route to the route set.
+    #
+    # @param path [String] The route path.
+    # @param options [Hash] The route options.
+    # @return [void]
+    def add_route(path, options = {})
+      ensure_unfrozen!
+      scoped_options = apply_scope(path, options)
+      @route_utils.define(scoped_options[:path], scoped_options.except(:path))
     end
 
     # Build a finalized router.
@@ -88,12 +102,7 @@ module RubyRoutes
       return self if @frozen
 
       @frozen = true
-      if @route_set.respond_to?(:finalize!)
-        @route_set.finalize!
-      else
-        @route_set.freeze
-      end
-      @route_utils.freeze if @route_utils.respond_to?(:freeze)
+      @route_set.freeze
       @scope_stack.freeze
       @concerns.freeze
       self
@@ -155,9 +164,9 @@ module RubyRoutes
     # @return [Router] self.
     def namespace(namespace_name, options = {}, &block)
       ensure_unfrozen!
-      push_scope({ path: "/#{namespace_name}", module: namespace_name }.merge(options)) do
-        instance_eval(&block) if block
-      end
+      scoped_options = { path: "/#{namespace_name}", module: namespace_name }.merge(options)
+      scope(scoped_options, &block)
+      self
     end
 
     # Define a scope.
@@ -169,26 +178,16 @@ module RubyRoutes
       ensure_unfrozen!
       scope_entry = options_or_path.is_a?(String) ? { path: options_or_path } : options_or_path
       push_scope(scope_entry) { instance_eval(&block) if block }
+      self
     end
 
-    # Define constraints.
-    #
-    # @param constraints_hash [Hash] The constraints for the scope.
-    # @param block [Proc] The block for nested routes.
-    # @return [Router] self.
-    def constraints(constraints_hash = {}, &block)
-      ensure_unfrozen!
-      push_scope(constraints: constraints_hash) { instance_eval(&block) if block }
-    end
-
-    # Define defaults.
-    #
-    # @param defaults_hash [Hash] The default values for the scope.
-    # @param block [Proc] The block for nested routes.
-    # @return [Router] self.
-    def defaults(defaults_hash = {}, &block)
-      ensure_unfrozen!
-      push_scope(defaults: defaults_hash) { instance_eval(&block) if block }
+    # Metaprogram `constraints` and `defaults` for DRYness.
+    %i[constraints defaults].each do |scope_type|
+      define_method(scope_type) do |options_hash = {}, &block|
+        ensure_unfrozen!
+        push_scope(scope_type => options_hash) { instance_eval(&block) if block }
+        self
+      end
     end
 
     # ---- Concerns ----------------------------------------------------------

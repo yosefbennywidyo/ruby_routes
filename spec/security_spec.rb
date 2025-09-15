@@ -252,26 +252,5 @@ RSpec.describe 'Security Features' do
       # Should have 1000 unique cache keys
       expect(results.uniq.size).to eq(1000)
     end
-
-    it 'handles concurrent params pool access safely' do
-      route_set = RubyRoutes::RouteSet.new
-
-      threads = []
-
-      10.times do
-        threads << Thread.new do
-          100.times do
-            params = route_set.send(:thread_local_params)
-            params[:test] = Thread.current.object_id
-            route_set.send(:return_params_to_pool, params)
-          end
-        end
-      end
-
-      threads.each(&:join)
-
-      # Should complete without errors
-      expect(true).to be true
-    end
   end
 end

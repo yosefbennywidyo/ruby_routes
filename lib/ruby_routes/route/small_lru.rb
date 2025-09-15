@@ -27,7 +27,7 @@ module RubyRoutes
       # @return [Integer] number of cache hits
       # @return [Integer] number of cache misses
       # @return [Integer] number of evictions (when capacity exceeded)
-      attr_reader :max_size, :hits, :misses, :evictions
+      attr_reader :max_size, :hits, :misses, :evictions, :hash
 
       # @param max_size [Integer] positive maximum size
       # @raise [ArgumentError] if max_size < 1
@@ -91,6 +91,42 @@ module RubyRoutes
         @hash.keys
       end
 
+      # Check if a key exists in the cache.
+      #
+      # @param key [Object] The key to check.
+      # @return [Boolean] True if the key exists, false otherwise.
+      def has_key?(key)
+        @hash.key?(key)
+      end
+
+      # Hash-like access for reading (delegates to get).
+      #
+      # @param key [Object] The key to retrieve.
+      # @return [Object, nil] The cached value or nil.
+      def [](key)
+        get(key)
+      end
+
+      # Include matcher (checks for key-value pair).
+      #
+      # @param pair [Hash] A hash with a single key-value pair (e.g., { 'key' => 'value' }).
+      # @return [Boolean] True if the pair exists in the cache, false otherwise.
+      def include?(pair)
+        return false unless pair.is_a?(Hash) && pair.size == 1
+
+        key, value = pair.first
+        @hash[key] == value
+      end
+
+      # Hash-like access for writing (delegates to set).
+      #
+      # @param key [Object] The key to set.
+      # @param value [Object] The value to cache.
+      # @return [Object] The value.
+      def []=(key, value)
+        set(key, value)
+      end
+
       # Debug / spec helper (avoid exposing internal Hash directly).
       # @return [Hash] shallow copy of internal store
       def inspect_hash
@@ -109,14 +145,24 @@ module RubyRoutes
         @misses += 1
       end
 
-      # Internal helper used by hit strategy to promote key.
-      # @param key [Object]
-      # @return [void]
-      def promote(key)
-        val = @hash.delete(key)
-        @hash[key] = val if val
+      def clear_counters!
+        @hits = 0
+        @misses = 0
+        @evictions = 0
       end
-      private :promote
+
+      # Internal helper used by hit strategy to promote key.
+      # Moves the key-value pair to the end of the hash (most recently used position).
+      #
+      # @param key [Object] The key to promote
+      # @return [Object, nil] The value associated with the key, or nil if not found
+      def promote(key)
+        return nil unless @hash.key?(key)
+
+        val = @hash.delete(key)
+        @hash[key] = val
+        val
+      end
     end
   end
 end

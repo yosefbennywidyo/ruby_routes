@@ -2,7 +2,6 @@
 
 require_relative 'ruby_routes/version'
 require_relative 'ruby_routes/constant'
-require_relative 'ruby_routes/string_extensions'
 require_relative 'ruby_routes/route'
 require_relative 'ruby_routes/route_set'
 require_relative 'ruby_routes/url_helpers'
@@ -10,6 +9,9 @@ require_relative 'ruby_routes/router'
 require_relative 'ruby_routes/radix_tree'
 require_relative 'ruby_routes/node'
 require_relative 'ruby_routes/router/builder'
+require_relative 'ruby_routes/strategies/base'
+require_relative 'ruby_routes/strategies/hash_based_strategy'
+require_relative 'ruby_routes/strategies/hybrid_strategy'
 
 # RubyRoutes
 #

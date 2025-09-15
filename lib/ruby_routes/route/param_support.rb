@@ -1,8 +1,7 @@
 # frozen_string_literal: true
 
-require_relative 'path_generation'
 require_relative 'warning_helpers'
-require_relative 'constraint_validator'
+require_relative 'query_helpers'
 
 module RubyRoutes
   class Route
@@ -15,6 +14,7 @@ module RubyRoutes
     # Thread-safety: Thread-local storage is used to avoid allocation and cross-thread mutation.
     module ParamSupport
       include RubyRoutes::Route::WarningHelpers
+      include RubyRoutes::Route::QueryHelpers
 
       private
 
@@ -26,11 +26,9 @@ module RubyRoutes
       # @param params [Hash] The user-provided parameters.
       # @return [Hash] The merged parameters.
       def build_merged_params(params)
-        return @defaults if params.nil? || params.empty?
-
         merged_hash = acquire_merge_hash
         merge_defaults_into(merged_hash)
-        merge_user_params_into(merged_hash, params)
+        merge_user_params_into(merged_hash, params) unless params.nil? || params.empty?
         merged_hash
       end
 
@@ -60,9 +58,12 @@ module RubyRoutes
       # @return [void]
       def merge_user_params_into(merged_hash, params)
         params.each do |key, value|
-          next if value.nil?
-
-          merged_hash[key.is_a?(String) ? key : key.to_s] = value
+          string_key = if key.is_a?(String)
+                        key
+                      else
+                        (Thread.current[:ruby_routes_symbol_keys] ||= {})[key] ||= key.to_s.freeze
+                      end
+          merged_hash[string_key] = value
         end
       end
 

@@ -36,7 +36,7 @@ A high-performance, lightweight routing system for Ruby applications providing a
 Add this line to your application's Gemfile:
 
 ```ruby
-gem 'ruby_routes', '~> 2.3.0'
+gem 'ruby_routes', '~> 2.7.0'
 ```
 
 And then execute:

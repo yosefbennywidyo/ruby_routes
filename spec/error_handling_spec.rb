@@ -98,7 +98,7 @@ RSpec.describe 'Error Handling and Edge Cases' do
     end
 
     it 'handles clearing empty route set' do
-      expect { route_set.clear! }.not_to raise_error
+      expect { route_set.clear_counters! }.not_to raise_error
       expect(route_set.empty?).to be true
     end
 
@@ -202,17 +202,6 @@ RSpec.describe 'Error Handling and Edge Cases' do
     it 'handles handler operations on empty node' do
       expect(node.get_handler('GET')).to be_nil
       expect(node.is_endpoint).to be false
-    end
-  end
-
-  describe 'String extensions edge cases' do
-    it 'handles regular strings' do
-      expect('user'.singularize).to eq('user')
-      expect('user'.pluralize).to eq('users')
-    end
-
-    it 'handles strings with special characters' do
-      expect('user-name'.singularize).to eq('user-name')
     end
   end
 

@@ -61,21 +61,11 @@ module RubyRoutes
       # @param scoped_path [String] The path to prepend the scope's path to.
       # @return [void]
       def apply_path_scope(scope, scoped_path)
-        path = scope[:path]&.to_s
-        return if path.nil? || path.empty?
+        scope_path = scope[:path]&.to_s
+        return if scope_path.nil? || scope_path.empty?
 
-        if path.end_with?('/')
-          if scoped_path.start_with?('/')
-            scoped_path.prepend(path.chomp('/'))
-          else
-            scoped_path.prepend(path)
-          end
-        else
-          scoped_path.prepend(scoped_path.start_with?('/') ? path : "#{path}/")
-        end
-
-        # Normalize: Ensure the final path starts with '/'
-        scoped_path.prepend('/') unless scoped_path.start_with?('/')
+        parts = [scope_path, scoped_path].map { |p| p.to_s.gsub(%r{^/|/$}, '') }.reject(&:empty?)
+        scoped_path.replace("/#{parts.join('/')}")
       end
 
       # Apply the module from a scope to the given options.
@@ -121,6 +111,28 @@ module RubyRoutes
         return unless scope[:constraints]
 
         scoped_options[:constraints] = scope[:constraints].merge(scoped_options[:constraints] || {})
+      end
+
+      # Get the current merged scope from the scope stack
+      #
+      # @return [Hash] The merged scope with combined namespaces
+      def current_scope
+        merged = {}
+        namespace_parts = []
+
+        @scope_stack.each do |scope|
+          if scope[:namespace]
+            namespace_parts << scope[:namespace].to_s
+          end
+          merged.merge!(scope)
+        end
+
+        # Combine namespaces for nested namespace support
+        if namespace_parts.any?
+          merged[:namespace] = namespace_parts.join('/')
+        end
+
+        merged
       end
     end
   end

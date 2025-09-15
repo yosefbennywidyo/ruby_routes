@@ -2,6 +2,8 @@
 
 require 'timeout'
 require_relative '../constant'
+require_relative 'warning_helpers'
+require_relative 'check_helpers'
 
 module RubyRoutes
   class Route
@@ -12,6 +14,8 @@ module RubyRoutes
     # validation rules. It also handles timeouts and raises appropriate exceptions
     # for constraint violations.
     module ConstraintValidator
+      include RubyRoutes::Route::WarningHelpers
+      include RubyRoutes::Route::CheckHelpers
       # Validate all constraints for the given parameters.
       #
       # This method iterates through all constraints and validates each parameter
@@ -47,6 +51,24 @@ module RubyRoutes
         end
       end
 
+      # Validate hash-form constraint rules.
+      #
+      # This method validates a value against a set of hash-form constraints,
+      # such as minimum length, maximum length, format, inclusion, exclusion,
+      # and range.
+      #
+      # @param constraint [Hash] The constraint rules.
+      # @param value [String] The value to validate.
+      # @raise [RubyRoutes::ConstraintViolation] If the value violates any constraint.
+      # @return [void]
+      def validate_hash_constraint!(constraint, value)
+        check_min_length(constraint, value)
+        check_max_length(constraint, value)
+        check_format(constraint, value)
+        check_in_list(constraint, value)
+        check_not_in_list(constraint, value)
+        check_range(constraint, value)
+      end
       # Handle built-in symbol/string rules via a simple lookup.
       #
       # @param rule [Symbol, String] The built-in constraint rule.
@@ -124,7 +146,8 @@ module RubyRoutes
       # @param value [Object] The value to validate.
       # @raise [RubyRoutes::ConstraintViolation] If the value is not a valid email.
       def validate_email_constraint(value)
-        invalid! unless value.to_s.match?(/\A[^@\s]+@[^@\s]+\.[^@\s]+\z/)
+        email_regex = /\A[a-zA-Z0-9.!\#$%&'*+\/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+\z/
+        invalid! unless value.to_s.match?(email_regex)
       end
 
       # Validate a slug constraint.

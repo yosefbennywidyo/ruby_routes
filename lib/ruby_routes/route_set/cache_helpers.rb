@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative '../route/small_lru'
+
 module RubyRoutes
   class RouteSet
     # CacheHelpers: extracted cache, request-key, and eviction logic to reduce
@@ -8,6 +10,8 @@ module RubyRoutes
     # This module provides methods for managing caches, request keys, and
     # implementing eviction policies for route recognition.
     module CacheHelpers
+
+      attr_reader :small_lru
       # Recognition cache statistics.
       #
       # @return [Hash] A hash containing:
@@ -16,31 +20,16 @@ module RubyRoutes
       #   - `:hit_rate` [Float] The cache hit rate as a percentage.
       #   - `:size` [Integer] The current size of the recognition cache.
       def cache_stats
-        total_requests = @cache_hits + @cache_misses
+        total_requests = @small_lru.hits + @small_lru.misses
         {
-          hits: @cache_hits,
-          misses: @cache_misses,
-          hit_rate: total_requests.zero? ? 0.0 : (@cache_hits.to_f / total_requests * 100.0),
+          hits: @small_lru.hits,
+          misses: @small_lru.misses,
+          hit_rate: total_requests.zero? ? 0.0 : (@small_lru.hits.to_f / total_requests * 100.0),
           size: @recognition_cache.size
         }
       end
 
       private
-
-      # Set up caches and request-key ring.
-      #
-      # Initializes the internal data structures for managing routes, named routes,
-      # recognition cache, and request-key ring buffer.
-      #
-      # @return [void]
-      def setup_caches
-        @routes = []
-        @named_routes = {}
-        @recognition_cache = {}
-        @recognition_cache_max = 2048
-        @cache_hits = 0
-        @cache_misses = 0
-      end
 
       # Fetch cached recognition entry while updating hit counter.
       #
@@ -48,10 +37,10 @@ module RubyRoutes
       # @return [Hash, nil] The cached recognition entry, or `nil` if not found.
       def fetch_cached_recognition(lookup_key)
         if (cached_result = @recognition_cache[lookup_key])
-          @cache_hits += 1
+          @small_lru.increment_hits
           return cached_result
         end
-        @cache_misses += 1
+        @small_lru.increment_misses
         nil
       end
 
@@ -64,12 +53,22 @@ module RubyRoutes
       # @param entry [Hash] The cache entry.
       # @return [void]
       def insert_cache_entry(cache_key, entry)
-        @cache_mutex ||= Mutex.new
         @cache_mutex.synchronize do
           if @recognition_cache.size >= @recognition_cache_max
-            @recognition_cache.keys.first(@recognition_cache_max / 4).each do |evict_key|
-              @recognition_cache.delete(evict_key)
-            end
+            # Calculate how many to keep (3/4 of max, rounded down)
+            keep_count = @recognition_cache_max / 4
+
+            # Get the keys to keep (newest 75%, assuming insertion order)
+            keys_to_keep = @recognition_cache.keys.last(keep_count)
+
+            # Get the entries to keep
+            entries_to_keep = @recognition_cache.slice(*keys_to_keep)
+
+            # Clear the entire cache (evicts the oldest 25%)
+            @recognition_cache.clear
+
+            # Re-add the kept entries (3/4)
+            @recognition_cache.merge!(entries_to_keep)
           end
           @recognition_cache[cache_key] = entry
         end

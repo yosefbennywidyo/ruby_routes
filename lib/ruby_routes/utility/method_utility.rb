@@ -42,7 +42,7 @@ module RubyRoutes
       # Now uses SmallLru for LRU eviction instead of simple clearing.
       #
       # @return [SmallLru]
-      METHOD_CACHE = RubyRoutes::Route::SmallLru.new(RubyRoutes::Constant::METHOD_CACHE_MAX_SIZE)
+      METHOD_CACHE = RubyRoutes::Route::SmallLru.new(RubyRoutes::Constant::CACHE_SIZE)
 
       # Normalize an HTTP method‑like input to a canonical uppercase `String`.
       #
@@ -69,16 +69,20 @@ module RubyRoutes
 
       private
 
+      def cache_normalized_method(input_string)
+        return input_string if already_upper_ascii?(input_string)
+
+        # Use SmallLru for LRU eviction, freeze key to prevent mutation
+        key = input_string.dup.freeze
+        METHOD_CACHE.get(key) || METHOD_CACHE.set(key, ascii_upcase(input_string.dup).freeze)
+      end
+
       # Normalize a `String` HTTP method.
       #
       # @param method_input [String] The HTTP method input.
       # @return [String] The normalized HTTP method.
       def normalize_string_method(method_input)
-        return method_input if already_upper_ascii?(method_input)
-
-        # Use SmallLru for LRU eviction, freeze key to prevent mutation
-        key = method_input.dup.freeze
-        METHOD_CACHE.get(key) || METHOD_CACHE.set(key, ascii_upcase(method_input.dup).freeze)
+        cache_normalized_method(method_input)
       end
 
       # Normalize a `Symbol` HTTP method.
@@ -98,11 +102,7 @@ module RubyRoutes
       # @return [String] The normalized HTTP method.
       def normalize_other_method(method_input)
         coerced = method_input.to_s
-        return coerced if already_upper_ascii?(coerced)
-
-        # Use SmallLru for LRU eviction, freeze key to prevent mutation
-        key = coerced.dup.freeze
-        METHOD_CACHE.get(key) || METHOD_CACHE.set(key, ascii_upcase(coerced.dup).freeze)
+        cache_normalized_method(coerced)
       end
 
       # Determine if a `String` consists solely of uppercase ASCII (`A–Z`) or non‑letters.
