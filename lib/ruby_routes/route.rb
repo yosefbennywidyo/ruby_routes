@@ -6,6 +6,8 @@ require 'rack'
 require 'set'
 require_relative 'constant'
 require_relative 'node'
+require_relative 'cache_setup'
+require_relative 'route_set/cache_helpers'
 require_relative 'route/small_lru'
 require_relative 'utility/key_builder_utility'
 require_relative 'utility/method_utility'
@@ -20,7 +22,6 @@ require_relative 'route/query_helpers'
 require_relative 'route/validation_helpers'
 require_relative 'route/segment_compiler'
 require_relative 'route/path_generation'
-require_relative 'route_set/cache_helpers'
 
 module RubyRoutes
   # Route
@@ -63,6 +64,7 @@ module RubyRoutes
     include RubyRoutes::Utility::PathUtility
     include RubyRoutes::Utility::KeyBuilderUtility
     include RubyRoutes::RouteSet::CacheHelpers
+    include RubyRoutes::CacheSetup
 
     attr_reader :path, :methods, :controller, :action, :name, :constraints, :defaults
 
@@ -123,14 +125,6 @@ module RubyRoutes
 
     private
 
-    # Split path into parts.
-    #
-    # @param path [String] The path to split.
-    # @return [Array<String>]
-    def split_path(path)
-      path.split('/').reject(&:empty?)
-    end
-
     # Expose for testing / external callers.
     public :extract_path_params_fast
 
@@ -149,7 +143,7 @@ module RubyRoutes
 
       @is_resource = @path.match?(%r{/:id(?:$|\.)})
 
-      initialize_validation_cache
+      setup_caches
       compile_segments
       compile_required_params
       check_static_path

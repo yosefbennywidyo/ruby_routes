@@ -28,12 +28,7 @@ module RubyRoutes
       # @return [Object] the cached value
       def call(lru, key)
         lru.increment_hits
-        # Internal storage name (@hash) is intentionally accessed reflectively
-        # to keep strategy decoupled from public API surface.
-        store = lru.hash
-        value = store.delete(key)
-        store[key] = value
-        value
+        lru.promote(key)
       end
     end
   end

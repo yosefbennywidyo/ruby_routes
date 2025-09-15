@@ -24,6 +24,16 @@ module RubyRoutes
       CAPTURED_PARAMS_BUFFER_KEY = :ruby_routes_finder_captured_params_buffer
       STATE_BUFFER_KEY = :ruby_routes_finder_state_buffer
 
+      # Clears a thread-local buffer hash.
+      #
+      # @param buffer_key [Symbol] The thread-local key for the buffer.
+      # @return [Hash] The cleared buffer.
+      def clear_buffer(buffer_key)
+        buffer = Thread.current[buffer_key] ||= {}
+        buffer.clear
+        buffer
+      end
+
       # Evaluate constraint rules for a candidate route.
       #
       # @param route_handler [Object]
@@ -57,10 +67,11 @@ module RubyRoutes
         segments = split_path_cached(path_input)
         return [nil, EMPTY_PARAMS] if segments.empty?
 
-        # Use thread-local, reusable hashes to avoid allocations
-        params = acquire_params_buffer(params_out)
-        state = acquire_state_buffer
-        captured_params = acquire_captured_params_buffer
+        # Clear and acquire thread-local buffers to avoid new hash creation
+        params = clear_buffer(PARAMS_BUFFER_KEY)
+        params.merge!(params_out) if params_out
+        captured_params = clear_buffer(CAPTURED_PARAMS_BUFFER_KEY)
+        state = acquire_state_buffer  # Already clears internally
 
         result = perform_traversal(segments, state, method, params, captured_params)
         return result unless result.nil?
@@ -72,9 +83,12 @@ module RubyRoutes
       #
       # @return [Hash] state hash with :current, :best_node, :best_params, :best_captured, :matched
       def acquire_state_buffer
-        state = Thread.current[STATE_BUFFER_KEY] ||= {}
-        state.clear
+        state = clear_buffer(STATE_BUFFER_KEY)  # Use clear_buffer for consistency
         state[:current] = @root
+        state[:best_node] = nil
+        state[:best_params] = nil
+        state[:best_captured] = nil
+        state[:matched] = false
         state
       end
 
@@ -127,7 +141,7 @@ module RubyRoutes
       # @param captured_params [Hash] captured parameters from traversal
       def record_candidate(state, _method, params, captured_params)
         state[:best_node] = state[:current]
-        state[:best_params] = params
+        state[:best_params] = params.dup
         state[:best_captured] = captured_params.dup
       end
 

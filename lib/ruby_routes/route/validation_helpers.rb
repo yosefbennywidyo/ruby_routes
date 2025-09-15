@@ -12,16 +12,6 @@ module RubyRoutes
     module ValidationHelpers
       include RubyRoutes::Route::CheckHelpers
 
-      # Initialize validation result cache.
-      #
-      # This method initializes an LRU (Least Recently Used) cache for storing
-      # validation results, with a maximum size of 64 entries.
-      #
-      # @return [void]
-      def initialize_validation_cache
-        @validation_cache = SmallLru.new(64)
-      end
-
       # Validate fundamental route shape.
       #
       # This method ensures that the route has a valid controller, action, and

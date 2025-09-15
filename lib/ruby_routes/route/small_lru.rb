@@ -152,11 +152,16 @@ module RubyRoutes
       end
 
       # Internal helper used by hit strategy to promote key.
-      # @param key [Object]
-      # @return [void]
+      # Moves the key-value pair to the end of the hash (most recently used position).
+      #
+      # @param key [Object] The key to promote
+      # @return [Object, nil] The value associated with the key, or nil if not found
       def promote(key)
+        return nil unless @hash.key?(key)
+
         val = @hash.delete(key)
-        @hash[key] = val if val
+        @hash[key] = val
+        val
       end
     end
   end

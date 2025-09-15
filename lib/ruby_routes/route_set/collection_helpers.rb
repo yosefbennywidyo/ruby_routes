@@ -74,14 +74,7 @@ module RubyRoutes
       #
       # @return [void]
       def clear_routes_and_caches!
-        @cache_mutex.synchronize do
-          @routes.clear
-          @named_routes.clear
-          @recognition_cache.clear
-          @small_lru.clear_counters!
-          @strategy = @strategy_class.new
-          RubyRoutes::Utility::KeyBuilderUtility.clear!
-        end
+        setup_caches
       end
 
       # Get the number of routes.

@@ -14,14 +14,23 @@ module RubyRoutes
           # this strategy is only used for these lengths.
           case segments.size
           when 1
-            traverse_segment(0, segments, state, method, params, captured_params)
+            outcome = traverse_segment(0, segments, state, method, params, captured_params)
+            return @finder.finalize_on_fail(state, method, params, captured_params) if outcome == :fail
           when 2
-            traverse_segment(0, segments, state, method, params, captured_params)
-            traverse_segment(1, segments, state, method, params, captured_params)
+            outcome = traverse_segment(0, segments, state, method, params, captured_params)
+            return @finder.finalize_on_fail(state, method, params, captured_params) if outcome == :fail
+            return nil if outcome == true  # stop
+            outcome = traverse_segment(1, segments, state, method, params, captured_params)
+            return @finder.finalize_on_fail(state, method, params, captured_params) if outcome == :fail
           when 3
-            traverse_segment(0, segments, state, method, params, captured_params)
-            traverse_segment(1, segments, state, method, params, captured_params)
-            traverse_segment(2, segments, state, method, params, captured_params)
+            outcome = traverse_segment(0, segments, state, method, params, captured_params)
+            return @finder.finalize_on_fail(state, method, params, captured_params) if outcome == :fail
+            return nil if outcome == true  # stop
+            outcome = traverse_segment(1, segments, state, method, params, captured_params)
+            return @finder.finalize_on_fail(state, method, params, captured_params) if outcome == :fail
+            return nil if outcome == true  # stop
+            outcome = traverse_segment(2, segments, state, method, params, captured_params)
+            return @finder.finalize_on_fail(state, method, params, captured_params) if outcome == :fail
           end
           nil # Return nil to indicate successful traversal
         end
@@ -32,7 +41,7 @@ module RubyRoutes
         # Returns true if traversal should stop (e.g., due to wildcard), false otherwise.
         def traverse_segment(index, segments, state, method, params, captured_params)
           next_node, stop = @finder.traverse_for_segment(state[:current], segments[index], index, segments, params, captured_params)
-          return false unless next_node
+          return :fail unless next_node
 
           state[:current] = next_node
           state[:matched] = true

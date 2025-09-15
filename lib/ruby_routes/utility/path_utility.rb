@@ -32,9 +32,10 @@ module RubyRoutes
       #   normalize_path('/users')   # => "/users"
       #   normalize_path('/')        # => "/"
       def normalize_path(raw_path)
-        return '/' if raw_path.nil? || raw_path.empty?
+        path_string = raw_path.to_s
+        return '/' if path_string.empty?
 
-        path = raw_path.start_with?('/') ? raw_path : "/#{raw_path}"
+        path = path_string.start_with?('/') ? path_string : "/#{path_string}"
         path = path.chomp('/') unless path == '/'
         path
       end

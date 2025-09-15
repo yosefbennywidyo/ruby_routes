@@ -52,7 +52,7 @@ module RubyRoutes
       # @raise [RubyRoutes::ConstraintViolation] If the value does not match the required format.
       # @return [void]
       def check_format(constraint, value)
-        return unless (format = constraint[:format]) && !value&.match?(format)
+        return unless (format = constraint[:format]) && value && !value.match?(format)
 
         raise RubyRoutes::ConstraintViolation, 'Value does not match required format'
       end

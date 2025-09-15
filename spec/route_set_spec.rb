@@ -176,40 +176,52 @@ RSpec.describe RubyRoutes::RouteSet do
     end
   end
 
-  describe '#clear!' do
-    it 'removes all routes and resets state' do
-      route1 = RubyRoutes::Route.new('/users', to: 'users#index')
-      route2 = RubyRoutes::Route.new('/posts', to: 'posts#index')
+  describe '#clear_routes_and_caches!' do
+    let(:route_set) { RubyRoutes::RouteSet.new }
 
+    before do
+      # Add some routes and simulate usage to populate caches
+      route1 = RubyRoutes::Route.new('/users', via: 'GET', to: 'users#index')
       route_set.add_route(route1)
+      route2 = RubyRoutes::Route.new('/users', via: 'POST', to: 'users#create')
       route_set.add_route(route2)
-
-      # Trigger some cache activity
+      # Simulate cache hits/misses (if methods exist)
       route_set.match('GET', '/users')
-      route_set.match('GET', '/posts')
-
-      expect(route_set.size).to eq(2)
-      expect(route_set.empty?).to be false
-
-      route_set.clear_counters!
-
-      expect(route_set.size).to eq(0)
-      expect(route_set.empty?).to be true
-
-      # Verify caches are cleared
-      stats = route_set.cache_stats
-      expect(stats[:hits]).to eq(0)
-      expect(stats[:misses]).to eq(0)
-      expect(stats[:size]).to eq(0)
     end
 
-    it 'handles clearing empty route set' do
-      expect(route_set.empty?).to be true
+    it 'resets collections and counters to initial state' do
+      # Verify state before clear
+      expect(route_set.routes).not_to be_empty
+      expect(route_set.named_routes).to be_empty
+      expect(route_set.cache_hits).to be == 0
 
-      expect { route_set.clear_counters! }.not_to raise_error
+      # Call clear!
+      route_set.clear_routes_and_caches!
 
-      expect(route_set.empty?).to be true
-      expect(route_set.size).to eq(0)
+      # Verify reset state
+      expect(route_set.routes).to eq([])
+      expect(route_set.named_routes).to eq({})
+      expect(route_set.cache_hits).to eq(0)
+      expect(route_set.cache_misses).to eq(0)
+    end
+
+    it 'recreates caches to prevent stale data' do
+      original_small_lru = route_set.small_lru
+      original_gen_cache = route_set.gen_cache
+      original_query_cache = route_set.query_cache
+      original_validation_cache = route_set.validation_cache
+
+      route_set.clear_routes_and_caches!
+
+      # Verify caches are new instances
+      expect(route_set.small_lru).not_to be(original_small_lru)
+      expect(route_set.gen_cache).not_to be(original_gen_cache)
+      expect(route_set.query_cache).not_to be(original_query_cache)
+      expect(route_set.validation_cache).not_to be(original_validation_cache)
+
+      # Verify they are properly initialized
+      expect(route_set.small_lru).to be_a(RubyRoutes::Route::SmallLru)
+      expect(route_set.gen_cache).to be_a(RubyRoutes::Route::SmallLru)
     end
   end
 

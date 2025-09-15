@@ -11,7 +11,7 @@ module RubyRoutes
     # implementing eviction policies for route recognition.
     module CacheHelpers
 
-      attr_reader :named_routes, :small_lru
+      attr_reader :small_lru
       # Recognition cache statistics.
       #
       # @return [Hash] A hash containing:
@@ -30,23 +30,6 @@ module RubyRoutes
       end
 
       private
-
-      # Set up caches and request-key ring.
-      #
-      # Initializes the internal data structures for managing routes, named routes,
-      # recognition cache, and request-key ring buffer.
-      #
-      # @return [void]
-      def setup_caches
-        @routes = []
-        @named_routes = {}
-        @recognition_cache = {}
-        @recognition_cache_max = RubyRoutes::Constant::CACHE_SIZE
-        @small_lru = RubyRoutes::Route::SmallLru.new(RubyRoutes::Constant::CACHE_SIZE)
-        @gen_cache = RubyRoutes::Route::SmallLru.new(RubyRoutes::Constant::CACHE_SIZE)
-        @query_cache = RubyRoutes::Route::SmallLru.new(RubyRoutes::Constant::CACHE_SIZE)
-        @cache_mutex = Mutex.new
-      end
 
       # Fetch cached recognition entry while updating hit counter.
       #
@@ -73,7 +56,7 @@ module RubyRoutes
         @cache_mutex.synchronize do
           if @recognition_cache.size >= @recognition_cache_max
             # Calculate how many to keep (3/4 of max, rounded down)
-            keep_count = (@recognition_cache_max * 3 / 4).to_i
+            keep_count = @recognition_cache_max / 4
 
             # Get the keys to keep (newest 75%, assuming insertion order)
             keys_to_keep = @recognition_cache.keys.last(keep_count)

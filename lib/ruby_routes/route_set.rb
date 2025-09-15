@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative 'cache_setup'
 require_relative 'strategies'
 require_relative 'utility/key_builder_utility'
 require_relative 'utility/method_utility'
@@ -36,6 +37,7 @@ module RubyRoutes
     include RubyRoutes::Route::ParamSupport
     include RubyRoutes::Route::PathGeneration
     include RubyRoutes::RouteSet::CollectionHelpers
+    include RubyRoutes::CacheSetup
 
     # Initialize empty collection and caches.
     #
