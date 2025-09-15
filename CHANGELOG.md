@@ -1,5 +1,24 @@
 # Changelog
 
+## 2.7.0 - 2025-09-16
+
+### ✨ Features & Performance
+
+* **Hybrid Matching Strategy**: Implemented a new default `HybridStrategy` that combines a fast hash-based lookup for static routes with a `RadixTree` for dynamic routes. This significantly improves performance for applications with many static paths.
+* **Optimized Traversal Strategy**: Introduced `TraversalStrategy` with an "unrolled" loop for common short paths (1-3 segments) and a generic loop for longer paths. This reduces overhead and speeds up route matching across the board.
+* **Memory Efficiency**: Optimized key-building, path-splitting, and method normalization to reduce object allocations in hot paths. Replaced a manual ring-buffer cache with a more robust `SmallLru` implementation.
+
+### ♻️ Refactoring & Fixes
+
+* **Unified Caching**: Consolidated the recognition cache logic into a single, more efficient `SmallLru` instance, removing a complex manual eviction strategy.
+* **Improved Encapsulation**: Refactored `SmallLru` and its `HitStrategy` to better encapsulate cache promotion logic.
+* **Robust Validation**: Hardened constraint validation to prevent errors with `nil` or unexpected values.
+* **Bug Fixes**:
+  * Corrected a cache eviction miscalculation to ensure the proper number of entries are retained.
+  * Fixed an issue in `WildcardSegment` to prevent parameter names from being overwritten.
+  * Resolved a bug in `HashBasedStrategy` to correctly normalize keys.
+* **Code Quality**: Streamlined cache initialization with a `CacheSetup` module, improved naming consistency, and removed minor redundancies from the test suite.
+
 ## 2.6.0 - 2025-09-08
 
 - **Architecture**: Implemented a flexible strategy pattern for route matching, allowing for hybrid lookups (static hash, dynamic radix tree) to optimize performance.
